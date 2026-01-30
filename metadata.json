@@ -1,0 +1,8 @@
+{
+  "name": "Target Instalaciones POP - Route Optimizer",
+  "description": "Professional logistics and route optimization platform with AI-powered cleaning, scheduling, and evidence collection for Target Instalaciones POP.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
