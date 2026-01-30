@@ -24,13 +24,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
         {isOpen ? (
           <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 duration-700">
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg p-1">
-              <img src="/images/iamanos.png" alt="Logo" className="w-full h-full object-contain" />
+              <img src="./images/iamanos.png" alt="Logo" className="w-full h-full object-contain" />
             </div>
-            <img src="/images/iamanos.png" alt="iamanos" className="h-6 w-auto" />
+            <img src="./images/iamanos.png" alt="iamanos" className="h-6 w-auto" />
           </div>
         ) : (
           <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg mx-auto p-1">
-            <img src="/images/iamanos.png" alt="Logo" className="w-full h-full object-contain" />
+            <img src="./images/iamanos.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
         )}
       </div>

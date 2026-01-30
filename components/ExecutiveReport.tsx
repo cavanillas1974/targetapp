@@ -57,12 +57,12 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ routes, sites, config
                 <div>
                     <div className="flex items-center gap-8 mb-6">
                         <div className="w-32 h-32 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl p-4 overflow-hidden border border-blue-500/10">
-                            <img src="/images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
+                            <img src="./images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
                         </div>
                         <div className="flex flex-col gap-2">
-                            <img src="/images/iamanos.png" alt="iamanos" className="h-12 w-fit" />
+                            <img src="./images/iamanos.png" alt="iamanos" className="h-12 w-fit" />
                             <div className="flex items-center gap-3">
-                                <img src="/images/logo.png" alt="Target" className="h-12" />
+                                <img src="./images/logo.png" alt="Target" className="h-12" />
                                 <span className="text-blue-500 text-[10px] font-black bg-blue-500/10 px-3 py-1 rounded-lg border border-blue-500/20 not-italic w-fit">OptiFlot™ EXECUTIVE ENGINE</span>
                             </div>
                         </div>

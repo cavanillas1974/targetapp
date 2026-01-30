@@ -899,18 +899,18 @@ const RoutePlanner: React.FC = () => {
         <div className="flex items-center gap-10">
           <div className="flex items-center gap-6">
             <div className="w-32 h-32 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-600/20 rotate-3 transition-transform hover:rotate-0 cursor-pointer overflow-hidden p-4" onClick={() => setActiveStep(0)}>
-              <img src="/images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
+              <img src="./images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
             </div>
             <div>
               <h1 className={`text-4xl font-black tracking-tighter italic flex items-center gap-8 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                 <div className="flex flex-col items-start text-left">
-                  <img src="/images/logo.png" alt="Target" className="h-20 w-auto" />
+                  <img src="./images/logo.png" alt="Target" className="h-20 w-auto" />
                   <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mt-1">Control Center</p>
                 </div>
                 <div className="h-12 w-px bg-white/10 mx-2"></div>
                 <div className="flex flex-col items-start gap-1">
                   <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest leading-none">Powered by</p>
-                  <img src="/images/iamanos.png" alt="iamanos" className="h-6 w-auto opacity-40 grayscale" />
+                  <img src="./images/iamanos.png" alt="iamanos" className="h-6 w-auto opacity-40 grayscale" />
                 </div>
                 <div className="ml-6">
                   <button
@@ -1862,9 +1862,9 @@ const RoutePlanner: React.FC = () => {
                     <div className="flex flex-col md:flex-row items-center justify-between gap-10">
                       <div className="flex items-center gap-8">
                         <div className="flex flex-col gap-2">
-                          <img src="/images/iamanos.png" alt="iamanos" className="h-10 w-auto" />
+                          <img src="./images/iamanos.png" alt="iamanos" className="h-10 w-auto" />
                           <div className="flex items-center gap-3">
-                            <img src="/images/logo.png" alt="Target" className="h-8 w-auto" />
+                            <img src="./images/logo.png" alt="Target" className="h-8 w-auto" />
                             <span className="text-blue-500 text-[8px] font-black bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-[0.2em]">OptiFlot™ 2.5</span>
                           </div>
                         </div>
@@ -1929,7 +1929,7 @@ const RoutePlanner: React.FC = () => {
                                 <div>
                                   <div className="flex items-center gap-3">
                                     <h3 className={`text-4xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{route.driverName}</h3>
-                                    <img src="/images/logo.png" alt="Target" className="h-8 w-auto opacity-50 group-hover:opacity-100 transition-opacity" />
+                                    <img src="./images/logo.png" alt="Target" className="h-8 w-auto opacity-50 group-hover:opacity-100 transition-opacity" />
                                   </div>
                                   <div className="flex items-center gap-4 mt-2">
                                     <span className="px-3 py-1 bg-blue-500/10 text-blue-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-blue-500/20">{route.base}</span>
@@ -2536,7 +2536,7 @@ const RoutePlanner: React.FC = () => {
               <div className="flex items-center gap-10">
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-4">
-                    <img src="/images/logo.png" alt="Target" className="h-14 w-auto" />
+                    <img src="./images/logo.png" alt="Target" className="h-14 w-auto" />
                     <div className="flex flex-col">
                       <span className="text-white text-[12px] font-black uppercase tracking-widest leading-none">Inversión Logística Target</span>
                       <span className="text-emerald-500 text-[8px] font-black bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-[0.2em] mt-1">Sello de Autorización</span>
@@ -2544,7 +2544,7 @@ const RoutePlanner: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity">
                     <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest leading-none">Powered by</p>
-                    <img src="/images/iamanos.png" alt="iamanos" className="h-4 w-auto grayscale" />
+                    <img src="./images/iamanos.png" alt="iamanos" className="h-4 w-auto grayscale" />
                   </div>
                 </div>
                 <div className="h-16 w-px bg-white/10 hidden md:block"></div>

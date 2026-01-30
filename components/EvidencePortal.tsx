@@ -95,13 +95,13 @@ const EvidencePortal: React.FC = () => {
           <div className="space-y-10 animate-in fade-in duration-500">
             <header className="text-center pt-4 flex flex-col items-center">
               <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-2xl p-4 mb-8 border border-white/10">
-                <img src="/images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
+                <img src="./images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
               </div>
               <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-4">Terminal de Campo v2.5</p>
               <div className="flex flex-col items-center gap-4">
-                <img src="/images/iamanos.png" alt="iamanos" className="h-10 w-auto" />
+                <img src="./images/iamanos.png" alt="iamanos" className="h-10 w-auto" />
                 <h2 className="text-4xl font-black text-white tracking-tighter italic uppercase flex items-center gap-2">
-                  <img src="/images/logo.png" alt="Logo" className="h-10" />
+                  <img src="./images/logo.png" alt="Logo" className="h-10" />
                 </h2>
               </div>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-4">SELECCIONA TU MISIÓN</p>
