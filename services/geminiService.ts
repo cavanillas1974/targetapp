@@ -151,6 +151,7 @@ export const geminiService = {
         1. "Puse menos tiendas de las que subí": Busca en "MOTIVOS DE EXCLUSIÓN". Explica que falló la geocodificación o hubo discrepancia de estado.
         2. "Por qué asignaste esta ruta así": Explica nuestra "REGLA DE ORO" (secuencia radial, no cruces, ahorro de combustible).
         3. "Capacidad insuficiente": Explica cuántas paradas puede hacer el equipo según la configuración de capacidad.
+        4. "Gráfica de Carga de Trabajo": Explica que las líneas de colores representan la intensidad operativa de cada BASE (CDMX, MTY, etc.) a través del tiempo. Los puntos más altos indican días con más rutas simultáneas.
         
         REGLAS DE ORO DE IAMANOS:
         - Las rutas NACEN en la base (Ecatepec/Monterrey/etc) y fluyen radialmente.

@@ -12,6 +12,19 @@ import { VisualCalendar } from './VisualCalendar';
 import { exportService } from '../services/exportService';
 import EvidencePortal from './EvidencePortal';
 import { CronogramasIdeas } from './CronogramasIdeas';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  LineChart,
+  Line,
+  Cell
+} from 'recharts';
 
 const RoutePlanner: React.FC = () => {
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
@@ -71,6 +84,25 @@ const RoutePlanner: React.FC = () => {
 
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [showQuotation, setShowQuotation] = useState(false);
+
+  const workloadData = useMemo(() => {
+    if (optimizedRoutes.length === 0) return [];
+    const grouped: { [key: string]: any } = {};
+    optimizedRoutes.forEach(r => {
+      const d = r.date || 'Sin fecha';
+      if (!grouped[d]) {
+        grouped[d] = { date: d, total: 0 };
+        depots.forEach(dep => {
+          grouped[d][dep.name] = 0;
+        });
+      }
+      grouped[d].total++;
+      if (r.base) {
+        grouped[d][r.base] = (grouped[d][r.base] || 0) + 1;
+      }
+    });
+    return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
+  }, [optimizedRoutes, depots]);
 
   // Persistence Logic - Cargar lista de proyectos y el último proyecto activo
   useEffect(() => {
@@ -1423,17 +1455,55 @@ const RoutePlanner: React.FC = () => {
                   <h4 className={`text-[10px] font-black uppercase tracking-[0.3em] ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Carga de Trabajo por Día</h4>
                   <span className="text-xs font-bold text-blue-400">Distribución de Paradas</span>
                 </div>
-                <div className="flex items-end gap-3 h-48">
-                  {[45, 62, 38, 55, 72, 48, 25].map((h, i) => (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-3">
-                      <div className={`w-full ${isLightMode ? 'bg-blue-500/20' : 'bg-blue-500/10'} rounded-t-2xl relative group cursor-help transition-all hover:bg-blue-500/30`} style={{ height: `${h}%` }}>
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-blue-600 text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity text-white whitespace-nowrap">
-                          {Math.round(h * 1.2)} Tiendas
-                        </div>
-                      </div>
-                      <span className={`text-[9px] font-black uppercase italic ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`}>Día {i + 1}</span>
+                <div className="h-64 w-full">
+                  {workloadData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={workloadData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={isLightMode ? '#e2e8f0' : '#ffffff10'} vertical={false} />
+                        <XAxis
+                          dataKey="date"
+                          stroke={isLightMode ? '#64748b' : '#94a3b8'}
+                          fontSize={9}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(val) => {
+                            const d = new Date(val + 'T00:00:00');
+                            return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                          }}
+                        />
+                        <YAxis stroke={isLightMode ? '#64748b' : '#94a3b8'} fontSize={9} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: isLightMode ? '#fff' : '#0f172a',
+                            borderColor: isLightMode ? '#e2e8f0' : '#ffffff10',
+                            borderRadius: '1.5rem',
+                            fontSize: '10px',
+                            fontWeight: 'bold',
+                            boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+                          }}
+                          itemStyle={{ padding: '2px 0' }}
+                        />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '9px', paddingTop: '20px', fontWeight: 'bold', textTransform: 'uppercase' }} />
+                        {depots.map((d, i) => (
+                          <Line
+                            key={d.id}
+                            type="monotone"
+                            dataKey={d.name}
+                            stroke={d.color}
+                            strokeWidth={4}
+                            dot={{ r: 4, strokeWidth: 2, fill: d.color }}
+                            activeDot={{ r: 8, strokeWidth: 0 }}
+                            animationDuration={1500}
+                          />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center opacity-30">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
+                      <p className="text-[10px] font-black uppercase mt-4 tracking-widest">Sin datos de cronograma</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
 
