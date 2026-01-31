@@ -99,33 +99,65 @@ export const geminiService = {
   async getChatResponse(history: { role: string, text: string }[], message: string, projectContext?: any) {
     let contextStr = "";
     if (projectContext) {
-      contextStr = `\nCONTEXTO DEL PROYECTO ACTUAL (${projectContext.metadata?.name || 'Desconocido'}):
-      - Tiendas totales: ${projectContext.sites?.length || 0}
-      - Rutas generadas: ${projectContext.optimizedRoutes?.length || 0}
+      const stats = projectContext.sites?.reduce((acc: any, s: any) => {
+        acc[s.status] = (acc[s.status] || 0) + 1;
+        return acc;
+      }, {});
+
+      const errors = (projectContext.sites || [])
+        .filter((s: any) => s.status === 'Error Crítico' || s.status === 'No geocodifica')
+        .slice(0, 20)
+        .map((s: any) => `- ${s.name_sitio}: ${s.notes || 'Error desconocido'}`)
+        .join('\n');
+
+      const routeSummary = (projectContext.optimizedRoutes || []).map((r: any) =>
+        `- Ruta ${r.id} (${r.date}): ${r.stops?.length} paradas, ${r.totalKm?.toFixed(1)}km. Técnico: ${r.driverName}`
+      ).join('\n');
+
+      contextStr = `
+      ESTADO DE LA MISIÓN ACTUAL:
+      - Nombre: ${projectContext.metadata?.name}
       - Rango: ${projectContext.config?.startDate} a ${projectContext.config?.endDate}
-      - Modo: ${projectContext.config?.routeMode}
+      - Capacidad: ${projectContext.config?.stopsPerDayPerRoute} paradas/día por ruta.
       
-      DATOS DE TIENDAS (Resumen):
-      ${(projectContext.sites || []).slice(0, 50).map((s: any) => `- ${s.name_sitio}: ${s.status} (${s.state})`).join('\n')}
-      ${(projectContext.sites || []).length > 50 ? '... y más tiendas.' : ''}
+      ESTADÍSTICAS DE TIENDAS:
+      - Total cargadas: ${projectContext.sites?.length || 0}
+      - OK: ${stats['OK'] || 0}
+      - Advertencias: ${stats['WARNING'] || 0}
+      - Errores/Excluidas: ${(stats['Error Crítico'] || 0) + (stats['No geocodifica'] || 0)}
+      
+      MOTIVOS DE EXCLUSIÓN (Primeros 20):
+      ${errors || 'Ninguno'}
+      
+      RESUMEN POR RUTA:
+      ${routeSummary || 'Aún no se generan rutas.'}
+      
+      DATOS TÉCNICOS ADICIONALES:
+      - Modo de Ruteo: ${projectContext.config?.routeMode} (Regreso a base: ${projectContext.config?.dailyReturnToDepot ? 'SÍ' : 'NO'})
+      - Progresión: ${projectContext.config?.progressionMode}
       `;
     }
 
     const chat = getAI().chats.create({
       model: 'gemini-2.0-flash',
       config: {
-        systemInstruction: `Eres el asistente oficial de iamanos OptiFlot™ (SISTEMA INTEGRAL DE RUTEO LOGÍSTICO). 
-        Responde en español de forma profesional y clara.
+        systemInstruction: `Eres el Cerebro Estratégico de iamanos OptiFlot™ (SISTEMA DE INTELIGENCIA LOGÍSTICA). 
+        Tu objetivo es explicar al usuario el PORQUÉ de las decisiones del sistema basándote en los datos adjuntos.
+        
+        SIEMPRE USA EL CONTEXTO DE LA MISIÓN ACTUAL:
         ${contextStr}
         
-        CONOCIMIENTO DE LA EMPRESA:
-        - Servicios: Almacenamiento, distribución e implementación.
-        - Diferenciador: La "Regla de Oro" - Rutas que avanzan en una sola dirección desde la base, sin cruces.
-        - Cobertura: Nacional con bases en CDMX (Ecatepec), Monterrey, Guadalajara, Tijuana, León y Sinaloa.
-        - Evidencia: Fotos obligatorias (antes/después), firma digital, GPS + timestamp.
-        - Flota: Camionetas propias de diversos tipos.
-        - Ubicación: Ecatepec de Morelos (Calle Olímpica MZ9 LT17, Col Olímpica 68).
-        - No especules con precios; pide datos para que un coordinador contacte al cliente.`,
+        GUÍA PARA RESPONDER PREGUNTAS CLAVE:
+        1. "Puse menos tiendas de las que subí": Busca en "MOTIVOS DE EXCLUSIÓN". Explica que falló la geocodificación o hubo discrepancia de estado.
+        2. "Por qué asignaste esta ruta así": Explica nuestra "REGLA DE ORO" (secuencia radial, no cruces, ahorro de combustible).
+        3. "Capacidad insuficiente": Explica cuántas paradas puede hacer el equipo según la configuración de capacidad.
+        
+        REGLAS DE ORO DE IAMANOS:
+        - Las rutas NACEN en la base (Ecatepec/Monterrey/etc) y fluyen radialmente.
+        - Priorizamos la eficiencia de combustible (distancia mínima).
+        - No se permiten cruces de rutas ("cross-crossing").
+        
+        Mantén un tono de mando, técnico pero servicial. No inventes datos. Si no está en el contexto, di que el sistema necesita más información o geocodificar más puntos.`,
       },
       history: history.map(h => ({
         role: h.role === 'user' ? 'user' : 'model',
