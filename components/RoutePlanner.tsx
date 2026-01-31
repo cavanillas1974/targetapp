@@ -71,11 +71,27 @@ const RoutePlanner: React.FC = () => {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [showQuotation, setShowQuotation] = useState(false);
 
-  // Persistence Logic (AntiGravity DB)
+  // Persistence Logic - Cargar lista de proyectos y el último proyecto activo
   useEffect(() => {
-    const savedProjects = localStorage.getItem('iamanos_projects_metadata');
-    if (savedProjects) setProjects(JSON.parse(savedProjects));
+    const savedMetadata = localStorage.getItem('iamanos_projects_metadata');
+    if (savedMetadata) {
+      const parsed = JSON.parse(savedMetadata);
+      setProjects(parsed);
+
+      // Intentar recuperar el último proyecto activo
+      const lastActiveId = localStorage.getItem('iamanos_active_project_id');
+      if (lastActiveId && parsed.some((p: any) => p.id === lastActiveId)) {
+        loadProject(lastActiveId);
+      }
+    }
   }, []);
+
+  // Persistir ID del proyecto activo para otros componentes (como el Chat)
+  useEffect(() => {
+    if (activeProjectId) {
+      localStorage.setItem('iamanos_active_project_id', activeProjectId);
+    }
+  }, [activeProjectId]);
 
   const saveProject = (currentSites: SiteRecord[], routes: any[], currentEvidences: Evidence[], currentConfig: PlannerConfig) => {
     try {

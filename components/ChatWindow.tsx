@@ -26,7 +26,17 @@ const ChatWindow: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await geminiService.getChatResponse(messages, userMsg);
+      // Intentar cargar contexto del proyecto activo
+      let projectContext = null;
+      const activeId = localStorage.getItem('iamanos_active_project_id');
+      if (activeId) {
+        const savedProject = localStorage.getItem(`iamanos_project_${activeId}`);
+        if (savedProject) {
+          projectContext = JSON.parse(savedProject);
+        }
+      }
+
+      const response = await geminiService.getChatResponse(messages, userMsg, projectContext);
       setMessages(prev => [...prev, { role: 'model', text: response }]);
     } catch (error) {
       setMessages(prev => [...prev, { role: 'model', text: 'Sistema temporalmente fuera de línea. Por favor reintente en unos momentos.' }]);

@@ -96,13 +96,29 @@ export const geminiService = {
     return JSON.parse(response.text || '{"sites":[]}');
   },
 
-  async getChatResponse(history: { role: string, text: string }[], message: string) {
+  async getChatResponse(history: { role: string, text: string }[], message: string, projectContext?: any) {
+    let contextStr = "";
+    if (projectContext) {
+      contextStr = `\nCONTEXTO DEL PROYECTO ACTUAL (${projectContext.metadata?.name || 'Desconocido'}):
+      - Tiendas totales: ${projectContext.sites?.length || 0}
+      - Rutas generadas: ${projectContext.optimizedRoutes?.length || 0}
+      - Rango: ${projectContext.config?.startDate} a ${projectContext.config?.endDate}
+      - Modo: ${projectContext.config?.routeMode}
+      
+      DATOS DE TIENDAS (Resumen):
+      ${(projectContext.sites || []).slice(0, 50).map((s: any) => `- ${s.name_sitio}: ${s.status} (${s.state})`).join('\n')}
+      ${(projectContext.sites || []).length > 50 ? '... y más tiendas.' : ''}
+      `;
+    }
+
     const chat = getAI().chats.create({
       model: 'gemini-2.0-flash',
       config: {
         systemInstruction: `Eres el asistente oficial de iamanos OptiFlot™ (SISTEMA INTEGRAL DE RUTEO LOGÍSTICO). 
         Responde en español de forma profesional y clara.
-        CONOCIMIENTO:
+        ${contextStr}
+        
+        CONOCIMIENTO DE LA EMPRESA:
         - Servicios: Almacenamiento, distribución e implementación.
         - Diferenciador: La "Regla de Oro" - Rutas que avanzan en una sola dirección desde la base, sin cruces.
         - Cobertura: Nacional con bases en CDMX (Ecatepec), Monterrey, Guadalajara, Tijuana, León y Sinaloa.
