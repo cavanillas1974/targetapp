@@ -28,10 +28,10 @@ const AppContent: React.FC = () => {
             <div>
               <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-1">Centro de Comando</p>
               <h1 className="text-2xl font-black tracking-tighter text-white">
-                {location.pathname === '/' && 'MANDO GENERAL'}
-                {location.pathname === '/planner' && 'PLAN MAESTRO'}
-                {location.pathname === '/evidence' && 'EVIDENCIAS LIVE'}
-                {location.pathname === '/chat' && 'INTELIGENCIA LOGÍSTICA'}
+                {location.pathname === '/' && 'DASHBOARD'}
+                {location.pathname === '/planner' && 'CRONOGRAMA'}
+                {location.pathname === '/evidence' && 'EVIDENCIAS CHÓFERES'}
+                {location.pathname === '/chat' && 'CONSULTA LO QUE NECESITES'}
               </h1>
             </div>
           </div>

@@ -6,7 +6,7 @@ import { ChatMessage } from '../types';
 
 const ChatWindow: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', text: 'Bienvenido al Centro de Mando iamanos. Soy tu estratega logístico para Target POP. ¿En qué puedo asistirte con el despliegue nacional hoy?' }
+    { role: 'model', text: 'Hola, soy el Cerebro Logístico de iamanos. Consulta lo que necesites sobre tus rutas, tiendas o el despliegue de Target POP.' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -51,7 +51,7 @@ const ChatWindow: React.FC = () => {
         <div className="flex items-center gap-5">
           <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
           <div>
-            <h3 className="font-black text-xl text-white tracking-tighter uppercase">iamanos Command AI</h3>
+            <h3 className="font-black text-xl text-white tracking-tighter uppercase">CONSULTA LO QUE NECESITES</h3>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">Operación Nacional en Tiempo Real</p>
           </div>
         </div>
@@ -89,7 +89,7 @@ const ChatWindow: React.FC = () => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Consultar métricas, cobertura o solicitar optimización..."
+            placeholder="Escribe aquí tu duda logística..."
             className="w-full bg-slate-900 shadow-inner border border-white/5 rounded-[2.5rem] py-6 pl-10 pr-20 focus:outline-none focus:border-blue-500/50 transition-all text-[15px] font-medium text-slate-200"
           />
           <button

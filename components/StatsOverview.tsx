@@ -38,7 +38,7 @@ const StatsOverview: React.FC = () => {
     <div className="space-y-10 animate-in fade-in duration-700">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Universo de Tiendas', value: totalStops, change: 'Plan Maestro', color: COLORS.primary },
+          { label: 'Universo de Tiendas', value: totalStops, change: 'Cronograma', color: COLORS.primary },
           { label: 'Ejecución Total', value: `${completionRate}%`, change: 'Cumplimiento', color: COLORS.aqua },
           { label: 'Sincronizados AI', value: evidences.length, change: 'Evidencia Hoy', color: COLORS.lightBlue },
           { label: 'En Operación', value: totalStops - evidences.length, change: 'Pendientes', color: COLORS.accent },
