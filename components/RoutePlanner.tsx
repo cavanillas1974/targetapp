@@ -201,13 +201,20 @@ const RoutePlanner: React.FC = () => {
 
   // Cargador dinámico de Google Maps SDK
   useEffect(() => {
-    const key = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY;
+    const rawKey = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY;
+    const key = typeof rawKey === 'string' ? rawKey.trim() : rawKey;
 
     if (!key) {
       console.warn("Google Maps API Key no encontrada.");
-      setMapError("Configuración incompleta: Se requiere llave de Google Maps para visualización GIS.");
+      // Solo mostramos error si el usuario está en la pestaña de mapas
+      if (activeTab === 'MAP') {
+        setMapError("Configuración incompleta: Se requiere llave de Google Maps para visualización GIS.");
+      }
       return;
     }
+
+    // Limpiamos errores previos si la llave sí existe
+    setMapError(null);
 
     // Definir manejador de falla de autenticación
     (window as any).gm_authFailure = () => {

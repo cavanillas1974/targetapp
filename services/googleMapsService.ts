@@ -1,6 +1,8 @@
 import { SiteRecord } from '../types';
 
-const API_KEY = (import.meta as any).env.VITE_GOOGLE_MAPS_API_KEY || '';
+const getApiKey = () => {
+    return (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
+};
 
 // Cache simple en memoria para evitar llamadas redundantes
 const geocodeCache: Record<string, { lat: number, lng: number }> = {};
@@ -11,7 +13,8 @@ export const googleMapsService = {
      * Obtiene coordenadas desde una dirección
      */
     async geocode(address: string): Promise<{ lat: number, lng: number, place_id?: string, formatted_address?: string, partial_match?: boolean } | null> {
-        if (!API_KEY) {
+        const key = getApiKey();
+        if (!key) {
             console.warn("Google Maps API Key no encontrada. Usando modo simulado.");
             return null;
         }
@@ -20,7 +23,7 @@ export const googleMapsService = {
 
         try {
             const response = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${API_KEY}`
+                `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${getApiKey()}`
             );
             const data = await response.json();
 
@@ -47,10 +50,10 @@ export const googleMapsService = {
      * Valida que las coordenadas correspondan a la ciudad/estado (Geocodificación Inversa)
      */
     async reverseGeocode(lat: number, lng: number): Promise<{ city?: string, state?: string } | null> {
-        if (!API_KEY) return null;
+        if (!getApiKey()) return null;
         try {
             const response = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${API_KEY}`
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${getApiKey()}`
             );
             const data = await response.json();
 
@@ -80,7 +83,7 @@ export const googleMapsService = {
         origin: { lat: number, lng: number },
         sites: SiteRecord[]
     ): Promise<SiteRecord[]> {
-        if (!API_KEY || sites.length === 0) {
+        if (!getApiKey() || sites.length === 0) {
             console.warn("API Key no disponible o sin sitios. Regresando orden original.");
             return sites;
         }
@@ -95,7 +98,7 @@ export const googleMapsService = {
             const originStr = `${origin.lat},${origin.lng}`;
 
             const response = await fetch(
-                `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${originStr}&waypoints=optimize:true|${waypoints}&key=${API_KEY}`
+                `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${originStr}&waypoints=optimize:true|${waypoints}&key=${getApiKey()}`
             );
             const data = await response.json();
 
@@ -117,16 +120,16 @@ export const googleMapsService = {
      * Obtiene distancia y tiempo real por carretera entre dos puntos
      */
     async getDistanceMatrix(origin: { lat: number, lng: number }, destination: { lat: number, lng: number }) {
-        const key = `${origin.lat},${origin.lng}-${destination.lat},${destination.lng}`;
-        if (matrixCache[key]) return matrixCache[key];
+        const key_cache = `${origin.lat},${origin.lng}-${destination.lat},${destination.lng}`;
+        if (matrixCache[key_cache]) return matrixCache[key_cache];
 
-        if (!API_KEY) {
+        if (!getApiKey()) {
             return { distance: 10, duration: 20 }; // Simulado
         }
 
         try {
             const response = await fetch(
-                `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&key=${API_KEY}`
+                `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&key=${getApiKey()}`
             );
             const data = await response.json();
 
@@ -135,7 +138,7 @@ export const googleMapsService = {
                     distance: data.rows[0].elements[0].distance.value / 1000, // Km
                     duration: data.rows[0].elements[0].duration.value / 60, // Minutos
                 };
-                matrixCache[key] = result;
+                matrixCache[key_cache] = result;
                 return result;
             }
             return null;
@@ -149,7 +152,7 @@ export const googleMapsService = {
      * Obtiene distancia y duración real de una ruta completa
      */
     async getRouteDistance(origin: { lat: number, lng: number }, stops: SiteRecord[], returnToOrigin: boolean = true): Promise<{ distance: number, duration: number } | null> {
-        if (!API_KEY || stops.length === 0) return null;
+        if (!getApiKey() || stops.length === 0) return null;
 
         try {
             const waypoints = stops.map(s => `${s.lat},${s.lng}`).join('|');
@@ -157,7 +160,7 @@ export const googleMapsService = {
             const destStr = returnToOrigin ? originStr : `${stops[stops.length - 1].lat},${stops[stops.length - 1].lng}`;
 
             const response = await fetch(
-                `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}&waypoints=${waypoints}&key=${API_KEY}`
+                `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}&waypoints=${waypoints}&key=${getApiKey()}`
             );
             const data = await response.json();
 

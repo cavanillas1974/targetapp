@@ -12,7 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: github-pages # Asegura que use los secretos del entorno github-pages si existen ahí
+    environment: github-pages # Vincula explícitamente a los secretos de este ambiente
     steps:
       - name: Checkout
         uses: actions/checkout@v4
