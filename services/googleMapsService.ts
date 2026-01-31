@@ -15,8 +15,14 @@ export const googleMapsService = {
     async geocode(address: string): Promise<{ lat: number, lng: number, place_id?: string, formatted_address?: string, partial_match?: boolean } | null> {
         const key = getApiKey();
         if (!key) {
-            console.warn("Google Maps API Key no encontrada. Usando modo simulado.");
-            return null;
+            console.warn("Google Maps API Key no encontrada. USANDO MODO SIMULADO (AntiGravity Fallback).");
+            // Generamos coordenadas aleatorias en un radio de la CDMX para que la lógica de ruteo funcione
+            return {
+                lat: 19.4326 + (Math.random() - 0.5) * 2.0, // Radio amplio en México
+                lng: -99.1332 + (Math.random() - 0.5) * 2.0,
+                formatted_address: address + " (UBICACIÓN ESTIMADA / SIMULADA)",
+                partial_match: true
+            };
         }
 
         if (geocodeCache[address]) return geocodeCache[address] as any;
@@ -124,7 +130,11 @@ export const googleMapsService = {
         if (matrixCache[key_cache]) return matrixCache[key_cache];
 
         if (!getApiKey()) {
-            return { distance: 10, duration: 20 }; // Simulado
+            // Factor de corrección: 1 grado ~ 111km
+            const latDiff = Math.abs(origin.lat - destination.lat);
+            const lngDiff = Math.abs(origin.lng - destination.lng);
+            const dist = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff) * 111;
+            return { distance: dist, duration: dist * 1.5 + 10 };
         }
 
         try {
@@ -152,7 +162,15 @@ export const googleMapsService = {
      * Obtiene distancia y duración real de una ruta completa
      */
     async getRouteDistance(origin: { lat: number, lng: number }, stops: SiteRecord[], returnToOrigin: boolean = true): Promise<{ distance: number, duration: number } | null> {
-        if (!getApiKey() || stops.length === 0) return null;
+        if (!getApiKey() || stops.length === 0) {
+            // Fallback: usar calculo haversine simple de LogicEngine
+            if (stops.length > 0) {
+                const { LogicEngine } = await import('../LogicEngine');
+                const distance = LogicEngine.estimateRouteDistance(origin, stops, returnToOrigin);
+                return { distance, duration: distance * 1.5 + (stops.length * 5) };
+            }
+            return null;
+        }
 
         try {
             const waypoints = stops.map(s => `${s.lat},${s.lng}`).join('|');
