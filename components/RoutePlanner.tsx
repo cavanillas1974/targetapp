@@ -542,8 +542,10 @@ const RoutePlanner: React.FC = () => {
     setIsCleaning(true);
     setError(null);
     try {
-      console.log("Iniciando Limpieza y Geocodificación...");
+      console.log("Iniciando Limpieza y Geocodificación para", sites.length, "sitios");
       const updatedSites = [...sites];
+      let processedCount = 0;
+
       for (let i = 0; i < updatedSites.length; i++) {
         const site = updatedSites[i];
         if (site.lat && site.lng && site.status === AddressStatus.OK) continue;
@@ -552,6 +554,7 @@ const RoutePlanner: React.FC = () => {
         const result = await googleMapsService.geocode(cleanAddress);
 
         if (result) {
+          processedCount++;
           // Validar Coherencia Geográfica (Reverse Geocoding)
           const geoValidation = await googleMapsService.reverseGeocode(result.lat, result.lng);
 
@@ -584,6 +587,8 @@ const RoutePlanner: React.FC = () => {
           updatedSites[i].notes = 'No se pudo geocodificar (ERROR)';
         }
       }
+
+      console.log("Limpieza terminada. Sitios procesados:", processedCount);
       setSites(updatedSites);
       setActiveStep(3);
     } catch (err: any) {

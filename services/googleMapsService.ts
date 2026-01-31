@@ -1,4 +1,5 @@
-import { SiteRecord } from '../types';
+import { SiteRecord, AddressStatus } from '../types';
+import { LogicEngine } from '../LogicEngine';
 
 const getApiKey = () => {
     return (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
@@ -165,7 +166,6 @@ export const googleMapsService = {
         if (!getApiKey() || stops.length === 0) {
             // Fallback: usar calculo haversine simple de LogicEngine
             if (stops.length > 0) {
-                const { LogicEngine } = await import('../LogicEngine');
                 const distance = LogicEngine.estimateRouteDistance(origin, stops, returnToOrigin);
                 return { distance, duration: distance * 1.5 + (stops.length * 5) };
             }
