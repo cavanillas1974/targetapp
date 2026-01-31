@@ -11,6 +11,7 @@ import ExecutiveReport from './ExecutiveReport';
 import { VisualCalendar } from './VisualCalendar';
 import { exportService } from '../services/exportService';
 import EvidencePortal from './EvidencePortal';
+import { CronogramasIdeas } from './CronogramasIdeas';
 
 const RoutePlanner: React.FC = () => {
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
@@ -1111,6 +1112,10 @@ const RoutePlanner: React.FC = () => {
             >
               ← Volver al Tablero de Proyectos
             </button>
+
+            <div className="mt-24 w-full text-left">
+              <CronogramasIdeas isLightMode={isLightMode} />
+            </div>
           </div>
         )}
 
