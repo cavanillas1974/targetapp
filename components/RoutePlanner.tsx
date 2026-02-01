@@ -850,91 +850,70 @@ const RoutePlanner: React.FC = () => {
 
   const handleExportQuotationPDF = async () => {
     setIsExporting(true);
-    // Usamos el template formal oculto
-    const element = document.getElementById('formal-quotation-template');
-    if (!element) {
-      console.error("Formal template not found");
+
+    // 1. Identificar todas las "páginas" del template
+    const pages = document.querySelectorAll('.pdf-page');
+    if (pages.length === 0) {
+      console.error("No pages found for PDF export");
       setIsExporting(false);
       return;
     }
 
     try {
-      // Forzar visibilidad temporal para el render
-      const originalPosition = element.style.position;
-      const originalWidth = element.style.width; // Guardar width original
-
-      element.style.position = 'absolute'; // Usar absolute para no afectar el flow pero poder renderizar completo
-      element.style.left = '0';
-      element.style.top = '0';
-      // Importante: Fijar un ancho A4-ish para que el texto reflow correctamente antes de capturar
-      // 800px es un buen ancho para visualizar en desktop, para PDF mejor usar algo cercano a 794px (A4 a 96dpi) o 1200px para alta calidad
-      element.style.width = '1000px';
-      element.style.zIndex = '9999';
-
-      const canvas = await html2canvas(element, {
-        scale: 2, // Mayor calidad
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: 1000 // Asegurar que html2canvas vea el ancho completo
-      });
-
-      // Restaurar estilos
-      element.style.position = originalPosition;
-      element.style.width = originalWidth;
-      element.style.left = '-9999px';
-
-      const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
         format: 'a4'
       });
 
-      const imgWidth = 210; // A4 width en mm
-      const pageHeight = 297; // A4 height en mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const imgWidth = 210; // A4 width mm
 
-      let heightLeft = imgHeight;
-      let position = 0;
+      // 2. Iterar sobre cada página visualmente definida
+      for (let i = 0; i < pages.length; i++) {
+        const pageElement = pages[i] as HTMLElement;
 
-      // Primera página
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+        // Preparar elemento para captura
+        const originalPosition = pageElement.style.position;
+        const originalLeft = pageElement.style.left;
 
-      // Páginas siguientes (si el contenido es largo)
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight; // Ajuste de posición para "subir" la imagen
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position - (imgHeight - heightLeft - pageHeight), imgWidth, imgHeight); // Lógica corregida para offset
-        // Nota: La lógica simple de addPage muchas veces requiere ajustar 'position' para que sea negativo:
-        // position = -pageIndex * 297;
+        // Lo hacemos visible pero fuera del viewport si es necesario, 
+        // aunque el diseño actual ya lo tiene en fixed left -9999.
+        // Solo aseguramos que html2canvas lo vea bien.
+        pageElement.style.position = 'absolute';
+        pageElement.style.left = '0';
+        pageElement.style.top = '0';
+        pageElement.style.zIndex = '9999';
 
-        // Mejor enfoque stándar looping:
+        const canvas = await html2canvas(pageElement, {
+          scale: 1.5, // Reducir escala para menor peso (antes 2)
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff', // Fondo sólido obligatorio para JPEG
+          windowWidth: 1000
+        });
+
+        // Restaurar estado original del elemento DOM
+        pageElement.style.position = originalPosition;
+        pageElement.style.left = originalLeft;
+
+        // USA JPEG CON COMPRESIÓN en lugar de PNG
+        const imgData = canvas.toDataURL('image/jpeg', 0.75);
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        // Agregar al PDF
+        if (i > 0) pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight); // Usar alias JPEG (optimizado)
       }
 
-      // Reiniciamos para hacerlo limpio con el loop estándar
-      const pdfClean = new jsPDF('p', 'mm', 'a4');
-      let positionClean = 0;
-      let heightLeftClean = imgHeight;
-
-      pdfClean.addImage(imgData, 'PNG', 0, positionClean, imgWidth, imgHeight);
-      heightLeftClean -= pageHeight;
-
-      while (heightLeftClean > 0) {
-        positionClean -= pageHeight; // Mover hacia arriba (offset negativo)
-        pdfClean.addPage();
-        pdfClean.addImage(imgData, 'PNG', 0, positionClean, imgWidth, imgHeight);
-        heightLeftClean -= pageHeight;
-      }
-
-      pdfClean.save(`Cotizacion_Formal_Target_${projectName.replace(/\s+/g, '_')}.pdf`);
+      pdf.save(`Cotizacion_Target_${projectName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
-      console.error("Error exporting Quotation PDF:", err);
+      console.error("Error exporting PDF:", err);
     } finally {
       setIsExporting(false);
     }
   };
+
+
 
   const generateSchedule = async () => {
     setIsGenerating(true);
@@ -3303,166 +3282,221 @@ const RoutePlanner: React.FC = () => {
             </div>
 
             {/* Template Oculto para PDF Formal */}
-            <div id="formal-quotation-template" className="fixed left-[-9999px] top-0 w-[800px] h-auto bg-white text-slate-900 p-16 font-sans">
-              {/* Header Formal */}
-              <div className="flex items-center justify-between border-b-4 border-[#CC0000] pb-8 mb-12">
-                <div className="flex items-center gap-6">
-                  <img src={targetLogo} alt="Target Logo" className="h-80 w-auto object-contain" />
-                </div>
-                <div className="text-right">
-                  <h1 className="text-4xl font-black text-[#003399] uppercase tracking-tighter">Cotización</h1>
-                  <p className="text-[#CC0000] font-bold text-sm mt-2">FOLIO: {projectName.substring(0, 8)}-{new Date().getFullYear()}</p>
-                  <p className="text-slate-500 text-xs mt-1">{new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                </div>
-              </div>
+            {/* =================================================================================
+                TEMPLATE DE PDF MULTIPÁGINA (Paginación Explícita)
+                ================================================================================= */}
+            <div id="pdf-container" className="fixed left-[-9999px] top-0">
 
-              {/* Info Proyecto */}
-              <div className="bg-slate-50 p-8 rounded-lg mb-12 border border-slate-200">
-                <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-4">Detalles del Proyecto</h3>
-                <div className="grid grid-cols-2 gap-8">
-                  <div>
-                    <p className="text-xs text-slate-500 font-bold uppercase">Campaña / Proyecto</p>
-                    <p className="text-lg font-bold text-slate-900">{projectName}</p>
+              {/* --- PÁGINA 1: PORTADA Y RESUMEN --- */}
+              <div className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-16 font-sans relative flex flex-col justify-between border border-gray-200">
+
+                <div>
+                  {/* Header */}
+                  <div className="flex items-start justify-between border-b-4 border-[#CC0000] pb-8 mb-12 relative z-10">
+                    <img src={targetLogo} alt="Target Logo" className="h-40 w-auto object-contain" />
+                    <div className="text-right">
+                      <h1 className="text-5xl font-black text-[#003399] uppercase tracking-tighter mb-2">Expediente</h1>
+                      <p className="text-[#CC0000] font-bold text-lg uppercase tracking-widest">Propuesta Económica</p>
+                      <p className="text-slate-400 text-sm mt-2">{new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 font-bold uppercase">Alcance</p>
-                    <p className="text-lg font-bold text-slate-900">{sites.length} Puntos de Venta / {quotationData.routesCount} Rutas Nacionales</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Tabla de Costos */}
-              <div className="mb-12">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-[#030712] text-white text-xs uppercase tracking-widest">
-                      <th className="py-4 px-6 text-left rounded-tl-lg">Concepto</th>
-                      <th className="py-4 px-6 text-center">Cantidad</th>
-                      <th className="py-4 px-6 text-right">Tarifa Unit.</th>
-                      <th className="py-4 px-6 text-right rounded-tr-lg">Importe</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    <tr className="border-b border-slate-100">
-                      <td className="py-6 px-6 font-bold text-slate-700">
-                        Gastos Operativos de Ruta
-                        <p className="text-xs font-normal text-slate-400 mt-1">Incluye: Gasolina, Casetas, Desgaste de Unidad e Imprevistos</p>
-                      </td>
-                      <td className="py-6 px-6 text-center font-medium">{Math.round(quotationData.quotedKm).toLocaleString()} km</td>
-                      <td className="py-6 px-6 text-right font-medium text-slate-500">$15.00</td>
-                      <td className="py-6 px-6 text-right font-bold text-slate-900">${Math.round(quotationData.fuelCost).toLocaleString()}</td>
-                    </tr>
-                    <tr className="border-b border-slate-100">
-                      <td className="py-6 px-6 font-bold text-slate-700">
-                        Viáticos y Costo de Cuadrilla (2 Pax)
-                        <p className="text-xs font-normal text-slate-400 mt-1">Hospedaje, Alimentos y Mano de Obra por día operativo</p>
-                      </td>
-                      <td className="py-6 px-6 text-center font-medium">{quotationData.totalRouteDays} días</td>
-                      <td className="py-6 px-6 text-right font-medium text-slate-500">$2,000.00</td>
-                      <td className="py-6 px-6 text-right font-bold text-slate-900">${Math.round(quotationData.totalViaticos).toLocaleString()}</td>
-                    </tr>
-                  </tbody>
-                  <tfoot className="bg-slate-50">
-                    <tr>
-                      <td colSpan={3} className="py-4 px-6 text-right font-bold text-slate-500 uppercase text-xs">Subtotal Operativo</td>
-                      <td className="py-4 px-6 text-right font-bold text-slate-700 text-lg">${Math.round(quotationData.subtotal).toLocaleString()}</td>
-                    </tr>
-                    <tr>
-                      <td colSpan={3} className="py-4 px-6 text-right font-bold text-emerald-600 uppercase text-xs">Gestión, Supervisión y Utilidad (30%)</td>
-                      <td className="py-4 px-6 text-right font-bold text-emerald-600 text-lg">+ ${Math.round(quotationData.margin).toLocaleString()}</td>
-                    </tr>
-                    <tr className="bg-[#CC0000] text-white">
-                      <td colSpan={3} className="py-6 px-6 text-right font-black uppercase tracking-widest">Inversión Logística Total</td>
-                      <td className="py-6 px-6 text-right font-black text-2xl">${Math.round(quotationData.totalProjectValue).toLocaleString()}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-                <p className="text-right text-[10px] text-slate-400 mt-2 uppercase font-bold tracking-widest">* precios en moneda nacional (MXN) + iva</p>
-              </div>
+                  {/* Project Info Big Card (SIMPLIFIED FOR LIGHTER PDF) */}
+                  <div className="bg-[#003399] text-white p-10 rounded-xl mb-12">
 
-              {/* Detalle de Rutas (Expediente Técnico) */}
-              <div className="mb-12">
-                <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">Expediente Técnico de Rutas</h3>
-                <div className="space-y-8">
-                  {optimizedRoutes.map((route, idx) => (
-                    <div key={route.id} className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden break-inside-avoid">
-                      {/* Route Header */}
-                      <div className="bg-[#030712] text-white px-6 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="bg-[#CC0000] text-xs font-black px-3 py-1 rounded uppercase tracking-wider">
-                            R-{String(idx + 1).padStart(2, '0')}
-                          </div>
-                          <div>
-                            <p className="text-sm font-bold uppercase tracking-wide">{route.driverName || 'Operador Asignado'}</p>
-                            <p className="text-[10px] text-slate-400 uppercase">{route.stops.length} Tiendas • {route.direction || 'Ruta Nacional'}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-[10px] uppercase font-bold text-slate-500">Recorrido Total</p>
-                          <p className="text-lg font-black">{Math.round(route.totalKm).toLocaleString()} km</p>
-                        </div>
+                    <p className="text-blue-200 font-bold uppercase tracking-widest text-xs mb-1">Proyecto / Campaña</p>
+                    <h2 className="text-3xl font-black italic uppercase tracking-tight mb-8 relative z-10">{projectName}</h2>
+
+                    <div className="grid grid-cols-3 gap-8 border-t border-blue-800 pt-8 relative z-10">
+                      <div>
+                        <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest">Cobertura</p>
+                        <p className="text-xl font-bold">{sites.length} <span className="text-sm font-normal text-slate-400">Puntos</span></p>
                       </div>
-
-                      {/* Stores Table */}
-                      <div className="p-6">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-slate-200 text-slate-400 uppercase tracking-wider">
-                              <th className="py-2 text-left font-bold w-12">No.</th>
-                              <th className="py-2 text-left font-bold">Punto de Venta / Sitio</th>
-                              <th className="py-2 text-left font-bold">Dirección / Ciudad</th>
-                              <th className="py-2 text-right font-bold w-24">ID</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {route.stops.map((stop: any, sIdx: number) => (
-                              <tr key={sIdx} className="hover:bg-white transition-colors">
-                                <td className="py-3 text-slate-400 font-medium">{sIdx + 1}</td>
-                                <td className="py-3 text-slate-700 font-bold">{stop.name_sitio}</td>
-                                <td className="py-3 text-slate-500">
-                                  {stop.direccion_completa ? stop.direccion_completa.substring(0, 40) + '...' : (stop.city || stop.estado || 'N/A')}
-                                </td>
-                                <td className="py-3 text-right text-slate-400 font-mono text-[10px]">{stop.site_id || 'S-' + sIdx}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div>
+                        <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest">Logística</p>
+                        <p className="text-xl font-bold">{quotationData.routesCount} <span className="text-sm font-normal text-slate-400">Rutas</span></p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest">Duración</p>
+                        <p className="text-xl font-bold">{quotationData.totalRouteDays} <span className="text-sm font-normal text-slate-400">Días Op.</span></p>
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Tabla Resumen */}
+                  <div className="mb-8">
+                    <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">Desglose de Inversión</h3>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 uppercase text-xs tracking-widest">
+                          <th className="py-3 px-4 text-left font-black">Concepto</th>
+                          <th className="py-3 px-4 text-right font-black">Importe</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        <tr>
+                          <td className="py-4 px-4 font-bold text-slate-700">Gastos Operativos de Ruta (Gasolina, Peajes)</td>
+                          <td className="py-4 px-4 text-right font-bold">${Math.round(quotationData.fuelCost).toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="py-4 px-4 font-bold text-slate-700">Viáticos y Cuadrillas Técnicas</td>
+                          <td className="py-4 px-4 text-right font-bold">${Math.round(quotationData.totalViaticos).toLocaleString()}</td>
+                        </tr>
+                        <tr>
+                          <td className="py-4 px-4 font-bold text-emerald-600">Gestión Integral y Supervisión</td>
+                          <td className="py-4 px-4 text-right font-bold text-emerald-600">+ ${Math.round(quotationData.margin).toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                      <tfoot className="border-t-2 border-slate-900">
+                        <tr>
+                          <td className="py-6 px-4 text-right font-black uppercase text-xl text-[#003399]">Inversión Total</td>
+                          <td className="py-6 px-4 text-right font-black text-3xl text-[#CC0000]">${Math.round(quotationData.totalProjectValue).toLocaleString()}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                    <p className="text-right text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">* Precios más IVA • Moneda Nacional (MXN)</p>
+                  </div>
+                </div>
+
+                {/* Footer Portada */}
+                <div className="border-t border-slate-200 pt-6">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-slate-400 max-w-md">Propuesta válida por 15 días naturales. Sujeta a disponibilidad de equipos al momento de la confirmación.</p>
+                    <p className="text-xs font-black text-[#003399]">PÁGINA 1 DE {Math.ceil(optimizedRoutes.length / 2) + 2}</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Footer Legales */}
-              <div className="mt-20 pt-8 border-t border-slate-200">
-                <p className="text-[10px] text-slate-400 text-justify leading-relaxed">
-                  ESTIMACIÓN COMERCIAL: Esta cotización tiene una vigencia de 15 días naturales. Los tiempos de traslado son estimados por Google Maps Platform y pueden variar por condiciones de tráfico o clima. Cualquier gasto extraordinario no contemplado en los rubros anteriores será notificado para autorización previa.
-                  <br /><br />
-                  <strong>TARGET INSTALACIONES POP S.A. DE C.V.</strong> | División de Logística Especializada
-                  <br />
-                  <span className="opacity-50 text-[8px] uppercase tracking-wider">Aplicación desarrollada por iamanos.com 2026 para uso exclusivo de Target.</span>
-                </p>
+              {/* --- PÁGINAS DE RUTAS (Loop Dinámico) --- */}
+              {Array.from({ length: Math.ceil(optimizedRoutes.length / 2) }).map((_, pageIndex) => (
+                <div key={pageIndex} className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-16 font-sans relative flex flex-col justify-between border border-gray-200">
+                  <div>
+                    {/* Header Simple */}
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-8">
+                      <div className="flex items-center gap-3 opacity-50">
+                        <img src={targetLogo} className="h-8 grayscale" alt="" />
+                        <span className="text-[10px] uppercase font-bold tracking-widest">Expediente Técnico</span>
+                      </div>
+                      <span className="text-[10px] font-black text-[#003399]">DETALLE OPERATIVO</span>
+                    </div>
+
+                    {/* Rutas (2 por página) */}
+                    <div className="space-y-8">
+                      {optimizedRoutes.slice(pageIndex * 2, (pageIndex * 2) + 2).map((route, rIdx) => (
+                        <div key={route.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm break-inside-avoid">
+                          {/* Route Card Header */}
+                          <div className="bg-[#003399] text-white px-6 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className="bg-white text-[#003399] text-sm font-black w-10 h-10 rounded-lg flex items-center justify-center shadow-lg">
+                                {String((pageIndex * 2) + rIdx + 1).padStart(2, '0')}
+                              </div>
+                              <div>
+                                <p className="text-sm font-bold uppercase tracking-wide">{route.driverName}</p>
+                                <p className="text-[10px] text-blue-200 uppercase">{route.stops.length} Tiendas • {route.direction || 'Ruta Nacional'}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] uppercase font-bold text-blue-200">Total KM</p>
+                              <p className="text-lg font-black">{Math.round(route.totalKm).toLocaleString()}</p>
+                            </div>
+                          </div>
+
+                          {/* Store List */}
+                          <div className="p-4">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b border-slate-200 text-slate-400 uppercase tracking-wider">
+                                  <th className="py-2 text-left w-8">#</th>
+                                  <th className="py-2 text-left">Tienda</th>
+                                  <th className="py-2 text-left">Ubicación</th>
+                                  <th className="py-2 text-right">ID</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {route.stops.map((stop: any, sIdx: number) => (
+                                  <tr key={sIdx} className="hover:bg-white text-[10px]">
+                                    <td className="py-1.5 text-slate-400 font-bold">{sIdx + 1}</td>
+                                    <td className="py-1.5 font-bold text-slate-700">{stop.name_sitio}</td>
+                                    <td className="py-1.5 text-slate-500 truncate max-w-[200px]">{stop.city || stop.estado}</td>
+                                    <td className="py-1.5 text-right text-slate-400 font-mono text-[9px]">{stop.site_id || '-'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Footer Página */}
+                  <div className="border-t border-slate-200 pt-6 mt-8">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest text-[#CC0000]">Target Instalaciones POP</p>
+                      <p className="text-xs font-black text-[#003399]">PÁGINA {pageIndex + 2} DE {Math.ceil(optimizedRoutes.length / 2) + 2}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* --- PÁGINA FINAL: FIRMAS --- */}
+              <div className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-16 font-sans relative flex flex-col justify-between border border-gray-200">
+                <div>
+                  <div className="flex items-center justify-center mb-20 pt-10">
+                    <img src={targetLogo} className="h-24 opacity-80" alt="" />
+                  </div>
+
+                  <div className="text-center max-w-2xl mx-auto mb-20">
+                    <h2 className="text-3xl font-black text-[#003399] uppercase tracking-tighter mb-6">Autorización de Proyecto</h2>
+                    <p className="text-slate-500 text-sm leading-relaxed">
+                      Al firmar este documento, el cliente acepta los términos y condiciones de servicio estipulados en el Contrato Marco de Prestación de Servicios Logísticos. La ejecución del proyecto comenzará 48 horas después de la recepción del anticipo pactado.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-20 px-10">
+                    <div className="border-t-2 border-slate-900 pt-6 text-center">
+                      <p className="text-sm font-black uppercase text-slate-900 mb-1">Target Instalaciones POP</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gerencia de Operaciones</p>
+                    </div>
+                    <div className="border-t-2 border-slate-900 pt-6 text-center">
+                      <p className="text-sm font-black uppercase text-slate-900 mb-1">Cliente Autorizado</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nombre y Firma</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-center border-t border-slate-200 pt-8">
+                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Generado automáticamente por la plataforma de optimización</p>
+                  <p className="text-[9px] text-[#003399] font-black mt-1">iamanos.com © 2026</p>
+                  <p className="text-xs font-black text-[#003399] mt-4">PÁGINA {Math.ceil(optimizedRoutes.length / 2) + 2} DE {Math.ceil(optimizedRoutes.length / 2) + 2}</p>
+                </div>
               </div>
+
             </div>
+
+
 
           </div>
         </div>
-      )}
+      )
+      }
 
       {/* Route Editor Modal */}
-      {showRouteEditor && optimizedRoutes.length > 0 && (
-        <RouteEditor
-          routes={optimizedRoutes}
-          isLightMode={isLightMode}
-          onRoutesUpdate={(updatedRoutes) => {
-            setOptimizedRoutes(updatedRoutes);
-            setUnsavedChanges(true);
-            saveProject(sites, updatedRoutes, evidences, config);
-          }}
-          onClose={() => setShowRouteEditor(false)}
-        />
-      )}
-    </div>
+      {
+        showRouteEditor && optimizedRoutes.length > 0 && (
+          <RouteEditor
+            routes={optimizedRoutes}
+            isLightMode={isLightMode}
+            onRoutesUpdate={(updatedRoutes) => {
+              setOptimizedRoutes(updatedRoutes);
+              setUnsavedChanges(true);
+              saveProject(sites, updatedRoutes, evidences, config);
+            }}
+            onClose={() => setShowRouteEditor(false)}
+          />
+        )
+      }
+    </div >
   );
 };
 
