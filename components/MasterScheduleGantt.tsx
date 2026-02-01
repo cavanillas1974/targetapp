@@ -300,21 +300,25 @@ export const MasterScheduleGantt: React.FC<MasterScheduleGanttProps> = ({
                                                         <>
                                                             {/* Activity Bar */}
                                                             <div
-                                                                className={`h-10 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer ${isHovered ? 'scale-105 shadow-lg' : ''
+                                                                className={`min-h-[2.5rem] py-1 px-0.5 rounded-lg flex flex-col items-center justify-center transition-all duration-300 cursor-pointer overflow-hidden ${isHovered ? 'scale-110 z-20 shadow-xl' : 'z-10'
                                                                     }`}
                                                                 style={{
                                                                     backgroundColor: route.color,
-                                                                    borderRadius: isFirstDay ? '1rem 0.5rem 0.5rem 1rem' : isLastDay ? '0.5rem 1rem 1rem 0.5rem' : '0.5rem'
+                                                                    borderRadius: isFirstDay ? '0.6rem 0.3rem 0.3rem 0.6rem' : isLastDay ? '0.3rem 0.6rem 0.6rem 0.3rem' : '0.3rem'
                                                                 }}
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     onViewDay?.(route, dayInfo);
                                                                 }}
                                                             >
-                                                                <span className="text-white text-[10px] font-black">
-                                                                    {dayInfo.stores.length}
-                                                                </span>
-                                                                <span className="text-white/70 text-[8px]">🏪</span>
+                                                                {dayInfo.stores.map((s: any, idx: number) => (
+                                                                    <span key={idx} className="text-white text-[6.5px] font-black leading-tight text-center uppercase tracking-tight truncate max-w-full w-full px-1">
+                                                                        {s.name_sitio || s.name || `Tienda ${idx + 1}`}
+                                                                    </span>
+                                                                ))}
+                                                                {dayInfo.overnightLocation && (
+                                                                    <span className="text-[6px] mt-0.5 opacity-80">🏨</span>
+                                                                )}
                                                             </div>
 
                                                             {/* Overnight Indicator */}
