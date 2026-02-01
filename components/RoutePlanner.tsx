@@ -280,19 +280,43 @@ const RoutePlanner: React.FC = () => {
     if (optimizedRoutes.length === 0) return null;
     const totalActualKm = optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0);
     const quotedKm = totalActualKm; // Kilometraje real calculado
+
     let totalRouteDays = 0;
+
     optimizedRoutes.forEach(route => {
-      const uniqueDays = new Set(route.stops.map((s: any) => s.scheduled_date).filter(Boolean));
-      totalRouteDays += uniqueDays.size;
+      // Filtrar fechas válidas
+      const validDates = route.stops
+        .map((s: any) => s.scheduled_date ? new Date(s.scheduled_date) : null)
+        .filter((d): d is Date => d !== null && !isNaN(d.getTime()));
+
+      if (validDates.length > 0) {
+        // Calcular span de días (incluyendo domingos/días intermedios)
+        const minDate = new Date(Math.min(...validDates.map(d => d.getTime())));
+        const maxDate = new Date(Math.max(...validDates.map(d => d.getTime())));
+
+        // Diferencia en milisegundos
+        const diffTime = Math.abs(maxDate.getTime() - minDate.getTime());
+        // Diferencia en días (ceil para asegurar día completo) + 1 para incluir el día de inicio
+        const daysSpan = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+
+        totalRouteDays += daysSpan;
+      }
     });
+
     const dailyRate = 2000;
     const totalViaticos = totalRouteDays * dailyRate;
-    const operationalCostPerKm = 15; // Gasolina, Casetas, Desgaste y Contratiempos
+
+    // Regla de Negocio: 15 pesos x Km cubre Gasolina, Casetas, Desgaste y Percances
+    const operationalCostPerKm = 15;
     const fuelCost = quotedKm * operationalCostPerKm;
 
     // Cálculo de Utilidad (30%)
     const subtotal = totalViaticos + fuelCost;
     const margin = subtotal * 0.30;
+    // const totalProjectValue = subtotal + margin; // OLD LOGIC
+
+    // Nueva lógica simplificada si el usuario prefiere sumar todo directo, 
+    // pero mantenemos estructura comercial estándar (Costo + Margen)
     const totalProjectValue = subtotal + margin;
 
     return {
@@ -3392,7 +3416,16 @@ const RoutePlanner: React.FC = () => {
                               </div>
                               <div>
                                 <p className="text-sm font-bold uppercase tracking-wide">{route.driverName}</p>
-                                <p className="text-[10px] text-blue-200 uppercase">{route.stops.length} Tiendas • {route.direction || 'Ruta Nacional'}</p>
+                                <p className="text-[10px] text-blue-200 uppercase">
+                                  {route.stops.length} Tiendas • {
+                                    (() => {
+                                      const d = route.stops.map((s: any) => s.scheduled_date ? new Date(s.scheduled_date) : null).filter(Boolean) as Date[];
+                                      if (d.length === 0) return '1 Día';
+                                      const diff = Math.abs(Math.max(...d.map(x => x.getTime())) - Math.min(...d.map(x => x.getTime())));
+                                      return (Math.ceil(diff / (86400000)) + 1) + ' Días';
+                                    })()
+                                  } • {route.direction || 'Ruta Nacional'}
+                                </p>
                               </div>
                             </div>
                             <div className="text-right">
