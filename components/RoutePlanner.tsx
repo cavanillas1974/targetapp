@@ -13,7 +13,7 @@ import { exportService } from '../services/exportService';
 import EvidencePortal from './EvidencePortal';
 import { CorridorRouteEngine, DEFAULT_HUBS, MEXICAN_CORRIDORS } from '../services/CorridorRouteEngine';
 import { MasterScheduleGantt } from './MasterScheduleGantt';
-import { CronogramasIdeas } from './CronogramasIdeas';
+import { SystemReadiness } from './SystemReadiness';
 import { RouteEditor } from './RouteEditor';
 import {
   ResponsiveContainer,
@@ -28,6 +28,8 @@ import {
   Line,
   Cell
 } from 'recharts';
+import targetLogo from '../Images/logo.png';
+import LZString from 'lz-string';
 
 const RoutePlanner: React.FC = () => {
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
@@ -143,7 +145,7 @@ const RoutePlanner: React.FC = () => {
         updatedAt: new Date().toISOString(),
         totalSites: currentSites.length,
         totalRoutes: routes.length,
-        status: routes.length > 0 ? 'EXECUTING' : 'PLANNING'
+        status: projects.find(p => p.id === id)?.status === 'APPROVED' ? 'APPROVED' : (routes.length > 0 ? 'EXECUTING' : 'PLANNING')
       };
 
       const projectData: Project = {
@@ -222,20 +224,43 @@ const RoutePlanner: React.FC = () => {
   const loadProject = (id: string) => {
     const saved = localStorage.getItem(`iamanos_project_${id}`);
     if (saved) {
-      const project: Project = JSON.parse(saved);
-      setActiveProjectId(id);
-      setProjectName(project.metadata.name);
-      setSites(project.sites);
-      setConfig(project.config);
-      setOptimizedRoutes(project.optimizedRoutes);
-      setEvidences(project.evidences);
-      setActiveStep(project.optimizedRoutes.length > 0 ? 4 : (project.sites.length > 0 ? 2 : 1));
+      try {
+        let project: Project;
+        // Check if string is likely compressed (not starting with { or [)
+        if (!saved.trim().startsWith('{') && !saved.trim().startsWith('[')) {
+          const decompressed = LZString.decompressFromUTF16(saved);
+          project = JSON.parse(decompressed || '{}');
+        } else {
+          project = JSON.parse(saved);
+        }
+
+        setActiveProjectId(id);
+        const name = project.metadata?.name || 'Proyecto Sin Nombre';
+        setProjectName(name);
+
+        if (project.sites) setSites(project.sites);
+        if (project.config) setConfig(project.config);
+        if (project.optimizedRoutes) setOptimizedRoutes(project.optimizedRoutes);
+        if (project.evidences) setEvidences(project.evidences);
+
+        // Determine correct step
+        if (project.metadata?.status === 'APPROVED') {
+          setActiveStep(4);
+          // Optional: lock UI here if needed
+        } else {
+          setActiveStep(project.optimizedRoutes?.length > 0 ? 4 : (project.sites?.length > 0 ? 2 : 1));
+        }
+
+      } catch (e) {
+        console.error("Failed to load project:", e);
+        setError("Error al cargar el proyecto. El archivo puede estar corrupto.");
+      }
     }
   };
 
   const deleteProject = (id: string, e: React.BaseSyntheticEvent) => {
     e.stopPropagation();
-    if (window.confirm("¿Deseas eliminar este proyecto permanentemente para liberar memoria?")) {
+    if (window.confirm("¿Deseas eliminar este proyecto permanentemente?\n\nEsta acción:\n1. Liberará espacio en la memoria del navegador.\n2. Borrará todas las rutas y evidencias asociadas.\n3. NO se puede deshacer.")) {
       const updatedMetadata = projects.filter(p => p.id !== id);
       setProjects(updatedMetadata);
       localStorage.setItem('iamanos_projects_metadata', JSON.stringify(updatedMetadata));
@@ -262,8 +287,14 @@ const RoutePlanner: React.FC = () => {
     });
     const dailyRate = 2000;
     const totalViaticos = totalRouteDays * dailyRate;
-    const operationalCostPerKm = 12.5; // Costo por KM (Mantenimiento + Gasolina + Desgaste)
+    const operationalCostPerKm = 15; // Gasolina, Casetas, Desgaste y Contratiempos
     const fuelCost = quotedKm * operationalCostPerKm;
+
+    // Cálculo de Utilidad (30%)
+    const subtotal = totalViaticos + fuelCost;
+    const margin = subtotal * 0.30;
+    const totalProjectValue = subtotal + margin;
+
     return {
       totalActualKm,
       quotedKm,
@@ -271,7 +302,9 @@ const RoutePlanner: React.FC = () => {
       dailyRate,
       totalViaticos,
       fuelCost,
-      totalProjectValue: totalViaticos + fuelCost,
+      subtotal,
+      margin,
+      totalProjectValue,
       routesCount: optimizedRoutes.length
     };
   }, [optimizedRoutes]);
@@ -525,8 +558,11 @@ const RoutePlanner: React.FC = () => {
           });
 
           setSites(data);
-          const newProjectName = file.name.replace('.csv', '').replace('.xlsx', '').toUpperCase();
-          setProjectName(newProjectName);
+          // MANTENER EL NOMBRE DE PROYECTO DEFINIDO POR EL USUARIO
+          // const newProjectName = file.name.replace('.csv', '').replace('.xlsx', '').toUpperCase();
+          // setProjectName(newProjectName);
+
+          // Guardamos con el nombre actual (state projectName)
           saveProject(data, [], [], config);
           setActiveStep(2);
         } catch (err) {
@@ -758,32 +794,102 @@ const RoutePlanner: React.FC = () => {
     }
   };
 
+  const handleApproveBudget = () => {
+    // 1. Confirmación de seguridad
+    if (!window.confirm("¿Estás seguro de APROBAR este presupuesto? \n\nEsta acción:\n1. Finalizará la fase de planeación.\n2. Guardará una versión definitiva del proyecto.\n3. Habilitará el acceso permanente en modo 'Solo Lectura'.")) {
+      return;
+    }
+
+    // 2. Actualizar estado del proyecto a APPROVED
+    const updatedProjects = projects.map(p =>
+      p.id === activeProjectId
+        ? { ...p, status: 'APPROVED' as const, updatedAt: new Date().toISOString() }
+        : p
+    );
+
+    setProjects(updatedProjects);
+    localStorage.setItem('iamanos_projects_metadata', JSON.stringify(updatedProjects));
+
+    // 3. Forzar guardado del Blob completo con el nuevo status
+    // Importante: saveProject usa el estado 'projects' actual, pero como acabamos de hacer setProjects(updatedProjects),
+    // React podría no haber actualizado 'projects' aun en este closure.
+    // Hack seguro: Pasamos un flag o, mejor, actualizamos el saveProject para que lea de updatedProjects si pudiéramos.
+    // Alternativa robusta: Construir el objeto Project manualmente aquí y guardarlo.
+
+    if (activeProjectId) {
+      const approvedMetadata = updatedProjects.find(p => p.id === activeProjectId)!;
+      const projectData: Project = {
+        metadata: approvedMetadata,
+        sites,
+        config,
+        optimizedRoutes,
+        evidences
+      };
+
+      // Guardar comprimido
+      const stringData = JSON.stringify(projectData);
+      const compressedData = LZString.compressToUTF16(stringData);
+      try {
+        localStorage.setItem(`iamanos_project_${activeProjectId}`, compressedData);
+      } catch (e) {
+        // Fallback
+        localStorage.setItem(`iamanos_project_${activeProjectId}`, stringData);
+      }
+    }
+
+    // 4. Feedback visual y cierre
+    alert(`✅ PROYECTO AUTORIZADO\n\nEl presupuesto ha sido aprobado exitosamente. El proyecto "${projectName}" ha sido archivado como DEFINITIVO y puede consultarse desde el Tablero Principal.`);
+    setShowQuotation(false);
+
+    // Redirigir a Dashboard
+    setActiveStep(4);
+    setActiveTab('COMMAND_CENTER');
+  };
+
+
+
   const handleExportQuotationPDF = async () => {
     setIsExporting(true);
-    const element = document.getElementById('quotation-export-container');
+    // Usamos el template formal oculto
+    const element = document.getElementById('formal-quotation-template');
     if (!element) {
-      console.error("Quotation element not found");
+      console.error("Formal template not found");
       setIsExporting(false);
       return;
     }
 
     try {
+      // Forzar visibilidad temporal para el render
+      const originalPosition = element.style.position;
+      element.style.position = 'relative';
+      element.style.left = '0';
+      element.style.top = '0';
+      element.style.zIndex = '9999';
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#030712' // Color oscuro para el PDF corporativo
+        backgroundColor: '#ffffff' // Siempre blanco para formalidad
       });
+
+      // Restaurar
+      element.style.position = originalPosition;
+      element.style.left = '-9999px';
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'landscape',
+        orientation: 'portrait', // Vertical para cotización formal
         unit: 'px',
-        format: [canvas.width, canvas.height]
+        format: 'a4'
       });
 
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
-      pdf.save(`Cotizacion_Target_iamanos_${projectName.replace(/\s+/g, '_')}.pdf`);
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Cotizacion_Formal_Target_${projectName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error("Error exporting Quotation PDF:", err);
     } finally {
@@ -795,14 +901,13 @@ const RoutePlanner: React.FC = () => {
     setIsGenerating(true);
     setError(null);
     try {
+      // 1. Validación Previa de Datos
+      const validSites = sites.filter(s => s.lat && s.lng && s.lat !== 0 && s.lng !== 0);
+      if (validSites.length === 0) {
+        throw new Error("No hay tiendas geocodificadas válidas. Ve al Paso 3 para normalizar direcciones.");
+      }
+
       console.log("🚀 Iniciando Misión AntiGravity: MOTOR DE CORREDORES GEOGRÁFICOS...");
-      console.log("📋 Reglas activas:");
-      console.log("   ✓ Rutas ilimitadas en paralelo por continuidad geográfica");
-      console.log("   ✓ Hub configurable por ruta (default: CDMX)");
-      console.log("   ✓ Todas las rutas inician el mismo día");
-      console.log("   ✓ Avance continuo SIN regreso al hub");
-      console.log("   ✓ Pernocta cerca de la siguiente tienda");
-      console.log("   ✓ Sin mezcla de regiones, sin zig-zag");
 
       // Configurar hub default desde depots
       const defaultHub = {
@@ -814,8 +919,8 @@ const RoutePlanner: React.FC = () => {
       };
 
       // Generar rutas por corredores
-      const corridorRoutes = await CorridorRouteEngine.generateCorridorRoutes(
-        sites,
+      let corridorRoutes = await CorridorRouteEngine.generateCorridorRoutes(
+        validSites, // Usar solo sitios válidos
         {
           startDate: config.startDate,
           stopsPerDay: config.stopsPerDayPerRoute,
@@ -825,37 +930,27 @@ const RoutePlanner: React.FC = () => {
         }
       );
 
+      // Retry Logic: Si falla, intentar con restricciones más relajadas
       if (corridorRoutes.length === 0) {
-        setError("No se generaron rutas. Verifica que las tiendas estén geocodificadas correctamente.");
-        setIsGenerating(false);
-        return;
+        console.warn("⚠️ Intento 1 fallido - Reintentando con buffer expandido...");
+        corridorRoutes = await CorridorRouteEngine.generateCorridorRoutes(
+          validSites,
+          {
+            startDate: config.startDate,
+            stopsPerDay: config.stopsPerDayPerRoute,
+            avgServiceMinutes: config.avgServiceMinutesPerStop,
+            bufferMinutes: config.bufferMinutesPerDay * 2, // Relax buffer
+            defaultHub
+          }
+        );
+      }
+
+      if (corridorRoutes.length === 0) {
+        throw new Error("No se pudieron generar rutas viables. Verifica que las tiendas no esten muy dispersas o reduce las restricciones.");
       }
 
       // Convertir al formato legacy para compatibilidad con la UI existente
       const allRoutesData = CorridorRouteEngine.convertToLegacyFormat(corridorRoutes, depots[0].id);
-
-      console.log(`\n📊 RESUMEN DE RUTAS GENERADAS:`);
-      console.log(`   📍 Total de rutas/corredores: ${allRoutesData.length}`);
-      console.log(`   🏪 Total de tiendas programadas: ${allRoutesData.reduce((acc, r) => acc + r.stops.length, 0)}`);
-      console.log(`   📅 Fecha de inicio (todas las rutas): ${config.startDate}`);
-
-      allRoutesData.forEach((route, idx) => {
-        const totalDays = route.scheduledDays?.length || 0;
-        console.log(`\n   🚐 RUTA ${route.id} - ${route.corridorName}`);
-        console.log(`      → Dirección: ${route.direction}`);
-        console.log(`      → Tiendas: ${route.stops.length}`);
-        console.log(`      → Días: ${totalDays}`);
-        console.log(`      → KM Total: ${Math.round(route.totalKm)}`);
-
-        // Log de pernoctas
-        if (route.scheduledDays) {
-          route.scheduledDays.forEach((day: any) => {
-            if (day.overnightLocation) {
-              console.log(`      🏨 Día ${day.dayNumber}: Pernocta en ${day.overnightLocation.name} (${day.overnightLocation.distanceToNextStore}km de siguiente tienda)`);
-            }
-          });
-        }
-      });
 
       setOptimizedRoutes(allRoutesData);
 
@@ -870,12 +965,11 @@ const RoutePlanner: React.FC = () => {
       setActiveStep(4);
 
       console.log("\n✅ MISIÓN ANTIGRAVITY COMPLETADA");
-      console.log("   Todas las rutas configuradas para inicio simultáneo");
-      console.log("   Avance continuo habilitado (sin regreso al hub)");
 
     } catch (err: any) {
       console.error("❌ Error crítico en Misión AntiGravity:", err);
-      setError("Fallo crítico en Misión AntiGravity: " + (err.message || "Error desconocido"));
+      // Mensaje de error amigable para el usuario
+      setError(typeof err === 'string' ? err : (err.message || "Error desconocido al generar rutas"));
     } finally {
       setIsGenerating(false);
     }
@@ -1186,7 +1280,7 @@ const RoutePlanner: React.FC = () => {
             </button>
 
             <div className="mt-16 w-full text-left">
-              <CronogramasIdeas isLightMode={isLightMode} />
+              <SystemReadiness isLightMode={isLightMode} depotsCount={depots.length} />
             </div>
           </div>
         )}
@@ -1876,7 +1970,7 @@ const RoutePlanner: React.FC = () => {
                                 </div>
                                 <div className="flex-1 flex gap-2">
                                   {optimizedRoutes.map((route, rIdx) => (
-                                    <div key={route.id} className="flex-1 min-w-[60px] flex flex-col items-center gap-1 group">
+                                    <div key={route.id} className="flex-1 min-w-[80px] flex flex-col items-center gap-1 group">
                                       <div className="w-2 h-2 rounded-full mb-1" style={{ backgroundColor: route.color }}></div>
                                       <span className="text-[9px] font-black text-white/70 group-hover:text-white transition-colors">R-{String(route.id).padStart(2, '0')}</span>
                                     </div>
@@ -1900,22 +1994,33 @@ const RoutePlanner: React.FC = () => {
                                       </div>
                                       <div className="flex-1 flex gap-2 h-8 items-center">
                                         {optimizedRoutes.map((route, rIdx) => {
-                                          const isWorking = route.scheduledDays?.some((sd: any) => sd.date === dateStr);
+                                          const scheduledDay = route.scheduledDays?.find((sd: any) => sd.date === dateStr);
+                                          const isWorking = !!scheduledDay;
+
                                           // Fallback si no hay scheduledDays (fase previa)
                                           const totalStops = route.stops.length;
                                           const routeDays = Math.ceil(totalStops / config.stopsPerDayPerRoute);
                                           const routeStartIdx = projectDates.indexOf(route.startDate || config.startDate);
                                           const isEstimatedWorking = !route.scheduledDays && (dIdx >= routeStartIdx && dIdx < routeStartIdx + routeDays);
 
+                                          // Obtener nombres de tiendas para este día
+                                          const storeNames = scheduledDay?.stops?.map((s: any) => s.name_sitio).join(', ') || '';
+
                                           return (
-                                            <div key={route.id} className="flex-1 min-w-[60px] h-full flex items-center justify-center">
+                                            <div key={route.id} className="flex-1 min-w-[80px] h-full flex items-center justify-center px-1">
                                               {(isWorking || isEstimatedWorking) && (
                                                 <div
-                                                  className="w-full h-5 rounded-md shadow-lg transform transition-transform hover:scale-110 flex items-center justify-center group/pill relative"
+                                                  className="w-full h-6 rounded-md shadow-lg transform transition-all hover:scale-[1.05] flex items-center justify-center group/pill relative px-2 overflow-hidden border border-white/10"
                                                   style={{ background: routeColors[rIdx % routeColors.length] }}
+                                                  title={storeNames || 'Tiendas Programadas'}
                                                 >
-                                                  <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent rounded-md"></div>
-                                                  <span className="text-[7px] font-black text-white opacity-0 group-hover/pill:opacity-100 transition-opacity">ACTIVA</span>
+                                                  <div className="absolute inset-0 bg-gradient-to-tr from-black/30 to-transparent rounded-md"></div>
+                                                  <span className="relative z-10 text-[7px] font-black text-white uppercase tracking-tighter truncate max-w-full">
+                                                    {storeNames || (isEstimatedWorking ? 'ESTIMADO' : 'ACTIVA')}
+                                                  </span>
+                                                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/pill:opacity-100 transition-opacity flex items-center justify-center">
+                                                    <span className="text-[6px] font-black text-white">DETALLES</span>
+                                                  </div>
                                                 </div>
                                               )}
                                             </div>
@@ -3084,21 +3189,21 @@ const RoutePlanner: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
                   <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Viáticos & Operatividad</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Costo por Cuadrillas</p>
                     <div className="flex items-baseline gap-3">
                       <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.totalViaticos).toLocaleString()}</p>
                       <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
                     </div>
-                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Suma de todas las paradas programadas por zona de despliegue</p>
+                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Calculado a $2,000 diarios por cuadrilla activa</p>
                   </div>
 
                   <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Movilidad & Combustible</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Gastos de Ruta (Km)</p>
                     <div className="flex items-baseline gap-3">
                       <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.fuelCost).toLocaleString()}</p>
                       <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
                     </div>
-                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Cálculo basado en {Math.round(quotationData.quotedKm).toLocaleString()} km proyectados</p>
+                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Gasolina, Desgaste, Casetas e Imprevistos ($15/km)</p>
                   </div>
                 </div>
 
@@ -3112,6 +3217,17 @@ const RoutePlanner: React.FC = () => {
                     <p className="text-[80px] md:text-[120px] leading-[0.85] font-black italic tracking-tighter drop-shadow-2xl">
                       {Math.round(quotationData.totalProjectValue).toLocaleString()}
                     </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-8 mt-8 border-t border-white/10 pt-8">
+                  <div>
+                    <p className="text-[10px] font-bold text-blue-200/50 uppercase">Subtotal Operativo</p>
+                    <p className="text-xl font-black">${Math.round(quotationData.subtotal).toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-emerald-400 uppercase">Utilidad / Gestión (30%)</p>
+                    <p className="text-xl font-black text-emerald-400">+ ${Math.round(quotationData.margin).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -3128,21 +3244,115 @@ const RoutePlanner: React.FC = () => {
                 <div className="flex gap-4">
                   <button
                     onClick={handleExportQuotationPDF}
-                    className="bg-emerald-600 text-white px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:bg-emerald-500 transition-all flex items-center gap-4 active:scale-95"
+                    className="bg-emerald-600 text-white px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:bg-emerald-500 transition-all flex items-center gap-4 active:scale-95 group"
                   >
                     {isExporting ? (
                       <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                     ) : (
-                      <span>📥</span>
+                      <span className="group-hover:-translate-y-1 transition-transform">📄</span>
                     )}
-                    Descargar PDF
+                    Descargar PDF Formal
                   </button>
-                  <button className="bg-white text-blue-600 px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 active:scale-95">
+                  <button
+                    onClick={handleApproveBudget}
+                    className="bg-white text-blue-600 px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 active:scale-95"
+                  >
                     <span>📑</span> Aprobar Inversión
                   </button>
                 </div>
               </div>
             </div>
+
+            {/* Template Oculto para PDF Formal */}
+            <div id="formal-quotation-template" className="fixed left-[-9999px] top-0 w-[800px] h-auto bg-white text-slate-900 p-16 font-sans">
+              {/* Header Formal */}
+              <div className="flex items-center justify-between border-b-4 border-[#CC0000] pb-8 mb-12">
+                <div className="flex items-center gap-6">
+                  <img src={targetLogo} alt="Target Logo" className="h-24 w-auto object-contain" />
+                </div>
+                <div className="text-right">
+                  <h1 className="text-4xl font-black text-[#003399] uppercase tracking-tighter">Cotización</h1>
+                  <p className="text-[#CC0000] font-bold text-sm mt-2">FOLIO: {projectName.substring(0, 8)}-{new Date().getFullYear()}</p>
+                  <p className="text-slate-500 text-xs mt-1">{new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+              </div>
+
+              {/* Info Proyecto */}
+              <div className="bg-slate-50 p-8 rounded-lg mb-12 border border-slate-200">
+                <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-4">Detalles del Proyecto</h3>
+                <div className="grid grid-cols-2 gap-8">
+                  <div>
+                    <p className="text-xs text-slate-500 font-bold uppercase">Campaña / Proyecto</p>
+                    <p className="text-lg font-bold text-slate-900">{projectName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 font-bold uppercase">Alcance</p>
+                    <p className="text-lg font-bold text-slate-900">{sites.length} Puntos de Venta / {quotationData.routesCount} Rutas Nacionales</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabla de Costos */}
+              <div className="mb-12">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-[#030712] text-white text-xs uppercase tracking-widest">
+                      <th className="py-4 px-6 text-left rounded-tl-lg">Concepto</th>
+                      <th className="py-4 px-6 text-center">Cantidad</th>
+                      <th className="py-4 px-6 text-right">Tarifa Unit.</th>
+                      <th className="py-4 px-6 text-right rounded-tr-lg">Importe</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm">
+                    <tr className="border-b border-slate-100">
+                      <td className="py-6 px-6 font-bold text-slate-700">
+                        Gastos Operativos de Ruta
+                        <p className="text-xs font-normal text-slate-400 mt-1">Incluye: Gasolina, Casetas, Desgaste de Unidad e Imprevistos</p>
+                      </td>
+                      <td className="py-6 px-6 text-center font-medium">{Math.round(quotationData.quotedKm).toLocaleString()} km</td>
+                      <td className="py-6 px-6 text-right font-medium text-slate-500">$15.00</td>
+                      <td className="py-6 px-6 text-right font-bold text-slate-900">${Math.round(quotationData.fuelCost).toLocaleString()}</td>
+                    </tr>
+                    <tr className="border-b border-slate-100">
+                      <td className="py-6 px-6 font-bold text-slate-700">
+                        Viáticos y Costo de Cuadrilla (2 Pax)
+                        <p className="text-xs font-normal text-slate-400 mt-1">Hospedaje, Alimentos y Mano de Obra por día operativo</p>
+                      </td>
+                      <td className="py-6 px-6 text-center font-medium">{quotationData.totalRouteDays} días</td>
+                      <td className="py-6 px-6 text-right font-medium text-slate-500">$2,000.00</td>
+                      <td className="py-6 px-6 text-right font-bold text-slate-900">${Math.round(quotationData.totalViaticos).toLocaleString()}</td>
+                    </tr>
+                  </tbody>
+                  <tfoot className="bg-slate-50">
+                    <tr>
+                      <td colSpan={3} className="py-4 px-6 text-right font-bold text-slate-500 uppercase text-xs">Subtotal Operativo</td>
+                      <td className="py-4 px-6 text-right font-bold text-slate-700 text-lg">${Math.round(quotationData.subtotal).toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} className="py-4 px-6 text-right font-bold text-emerald-600 uppercase text-xs">Gestión, Supervisión y Utilidad (30%)</td>
+                      <td className="py-4 px-6 text-right font-bold text-emerald-600 text-lg">+ ${Math.round(quotationData.margin).toLocaleString()}</td>
+                    </tr>
+                    <tr className="bg-[#CC0000] text-white">
+                      <td colSpan={3} className="py-6 px-6 text-right font-black uppercase tracking-widest">Inversión Logística Total</td>
+                      <td className="py-6 px-6 text-right font-black text-2xl">${Math.round(quotationData.totalProjectValue).toLocaleString()}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+                <p className="text-right text-[10px] text-slate-400 mt-2 uppercase font-bold tracking-widest">* precios en moneda nacional (MXN) + iva</p>
+              </div>
+
+              {/* Footer Legales */}
+              <div className="mt-20 pt-8 border-t border-slate-200">
+                <p className="text-[10px] text-slate-400 text-justify leading-relaxed">
+                  ESTIMACIÓN COMERCIAL: Esta cotización tiene una vigencia de 15 días naturales. Los tiempos de traslado son estimados por Google Maps Platform y pueden variar por condiciones de tráfico o clima. Cualquier gasto extraordinario no contemplado en los rubros anteriores será notificado para autorización previa.
+                  <br /><br />
+                  <strong>TARGET INSTALACIONES POP S.A. DE C.V.</strong> | División de Logística Especializada
+                  <br />
+                  <span className="opacity-50 text-[8px] uppercase tracking-wider">Aplicación desarrollada por iamanos.com 2026 para uso exclusivo de Target.</span>
+                </p>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

@@ -166,7 +166,7 @@ export interface ProjectMetadata {
   updatedAt: string;
   totalSites: number;
   totalRoutes: number;
-  status: 'PLANNING' | 'EXECUTING' | 'COMPLETED';
+  status: 'PLANNING' | 'EXECUTING' | 'COMPLETED' | 'APPROVED';
 }
 
 export interface Project {

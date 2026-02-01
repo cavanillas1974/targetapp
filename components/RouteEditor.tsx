@@ -3,7 +3,7 @@
  * ROUTE EDITOR - EDITOR DE RUTAS Y TIENDAS
  * ===================================================
  * Componente para mover tiendas entre rutas de forma
- * visual, intuitiva y con drag & drop.
+ * visual, intuitiva y con inserción precisa.
  */
 
 import React, { useState, useMemo } from 'react';
@@ -37,7 +37,6 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
 }) => {
     const [localRoutes, setLocalRoutes] = useState<Route[]>([...routes]);
     const [selectedStore, setSelectedStore] = useState<{ store: SiteRecord; routeId: string } | null>(null);
-    const [targetRouteId, setTargetRouteId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set(routes.map(r => r.id)));
     const [hasChanges, setHasChanges] = useState(false);
@@ -64,7 +63,7 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
     };
 
     // Mover tienda a otra ruta
-    const moveStore = (store: SiteRecord, fromRouteId: string, toRouteId: string) => {
+    const moveStore = (store: SiteRecord, fromRouteId: string, toRouteId: string, index?: number) => {
         if (fromRouteId === toRouteId) return;
 
         const updatedRoutes = localRoutes.map(route => {
@@ -75,9 +74,18 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
                 };
             }
             if (route.id === toRouteId) {
+                const newStops = [...route.stops];
+                const cleanStore = { ...store, routeId: toRouteId };
+
+                if (typeof index === 'number' && index >= 0) {
+                    newStops.splice(index, 0, cleanStore);
+                } else {
+                    newStops.push(cleanStore);
+                }
+
                 return {
                     ...route,
-                    stops: [...route.stops, { ...store, routeId: toRouteId }]
+                    stops: newStops
                 };
             }
             return route;
@@ -85,7 +93,6 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
 
         setLocalRoutes(updatedRoutes);
         setSelectedStore(null);
-        setTargetRouteId(null);
         setHasChanges(true);
     };
 
@@ -128,7 +135,7 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
                                     Editor de Rutas
                                 </h2>
                                 <p className="text-slate-500 text-sm font-medium mt-1">
-                                    Mueve tiendas entre rutas • Selecciona una tienda y elige su nueva ruta
+                                    Mueve tiendas entre rutas • Selecciona una tienda para ver opciones de inserción
                                 </p>
                             </div>
                         </div>
@@ -196,7 +203,7 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
                                 Tienda seleccionada: <span className="font-black">{selectedStore.store.name_sitio}</span>
                             </p>
                             <p className={`text-sm ${isLightMode ? 'text-blue-700' : 'text-blue-400'}`}>
-                                Haz clic en otra ruta para mover esta tienda, o haz clic de nuevo para cancelar
+                                Selecciona <strong>"Mover al Final"</strong> en una ruta o haz clic en las <strong>barras de inserción</strong> entre tiendas para colocarla en una posición específica.
                             </p>
                         </div>
                         <button
@@ -219,23 +226,13 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
                             return (
                                 <div
                                     key={route.id}
-                                    className={`${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/5'} rounded-3xl border overflow-hidden transition-all ${isTargetable ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900 cursor-pointer hover:bg-blue-500/10' : ''
+                                    className={`${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-white/5 border-white/5'} rounded-3xl border overflow-hidden transition-all ${isTargetable ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900' : ''
                                         }`}
-                                    onClick={() => {
-                                        if (isTargetable && selectedStore) {
-                                            moveStore(selectedStore.store, selectedStore.routeId, route.id);
-                                        }
-                                    }}
                                 >
                                     {/* Route Header */}
                                     <div
                                         className={`px-6 py-4 flex items-center justify-between cursor-pointer ${isLightMode ? 'hover:bg-slate-100' : 'hover:bg-white/5'} transition-colors`}
-                                        onClick={(e) => {
-                                            if (!isTargetable) {
-                                                e.stopPropagation();
-                                                toggleRoute(route.id);
-                                            }
-                                        }}
+                                        onClick={() => toggleRoute(route.id)}
                                     >
                                         <div className="flex items-center gap-4">
                                             <div
@@ -260,107 +257,156 @@ export const RouteEditor: React.FC<RouteEditorProps> = ({
                                         </div>
 
                                         {isTargetable ? (
-                                            <div className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm font-bold">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    moveStore(selectedStore.store, selectedStore.routeId, route.id);
+                                                }}
+                                                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-xl text-sm font-bold hover:bg-blue-600 transition-colors z-10 shadow-lg shadow-blue-500/30"
+                                            >
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                                     <path d="M5 12h14M12 5l7 7-7 7" />
                                                 </svg>
-                                                Mover Aquí
-                                            </div>
+                                                Mover al Final
+                                            </button>
                                         ) : (
-                                            <svg
-                                                width="20" height="20"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                strokeWidth="2"
-                                                className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                                            <button
+                                                className={`p-2 rounded-lg transition-colors ${isLightMode ? 'hover:bg-slate-200' : 'hover:bg-white/10'}`}
                                             >
-                                                <path d="M6 9l6 6 6-6" />
-                                            </svg>
+                                                <svg
+                                                    width="20" height="20"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    strokeWidth="2"
+                                                    className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                                                >
+                                                    <path d="M6 9l6 6 6-6" />
+                                                </svg>
+                                            </button>
                                         )}
                                     </div>
 
                                     {/* Stores List */}
-                                    {isExpanded && !isTargetable && (
-                                        <div className={`border-t ${isLightMode ? 'border-slate-200' : 'border-white/5'} max-h-[300px] overflow-y-auto custom-scrollbar`}>
+                                    {isExpanded && (
+                                        <div className={`border-t ${isLightMode ? 'border-slate-200' : 'border-white/5'} max-h-[400px] overflow-y-auto custom-scrollbar`}>
                                             {filteredStores.length === 0 ? (
                                                 <div className="p-6 text-center">
                                                     <p className="text-slate-500 text-sm">
                                                         {searchTerm ? 'No se encontraron tiendas con ese criterio' : 'Sin tiendas asignadas'}
                                                     </p>
+                                                    {isTargetable && (
+                                                        <button
+                                                            onClick={() => moveStore(selectedStore.store, selectedStore.routeId, route.id, 0)}
+                                                            className="mt-4 text-blue-500 font-bold hover:underline"
+                                                        >
+                                                            + Insertar aquí como primera tienda
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <div className="divide-y divide-white/5">
                                                     {filteredStores.map((store, idx) => {
                                                         const isSelected = selectedStore?.store.id === store.id;
+                                                        // Find actual index in the master route array to ensure correct insertion
+                                                        const actualIndex = route.stops.findIndex(s => s.id === store.id);
 
                                                         return (
-                                                            <div
-                                                                key={store.id}
-                                                                className={`px-6 py-3 flex items-center gap-4 cursor-pointer transition-all ${isSelected
-                                                                    ? (isLightMode ? 'bg-blue-100' : 'bg-blue-500/20')
-                                                                    : (isLightMode ? 'hover:bg-slate-100' : 'hover:bg-white/5')
-                                                                    }`}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    if (isSelected) {
-                                                                        setSelectedStore(null);
-                                                                    } else {
-                                                                        setSelectedStore({ store, routeId: route.id });
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black ${isSelected
-                                                                    ? 'bg-blue-500 text-white'
-                                                                    : isLightMode ? 'bg-slate-200 text-slate-600' : 'bg-white/10 text-slate-400'
-                                                                    }`}>
-                                                                    {idx + 1}
-                                                                </div>
+                                                            <React.Fragment key={store.id}>
+                                                                {/* Insertion Zone (Before Item) - Only when targetable */}
+                                                                {isTargetable && (
+                                                                    <div
+                                                                        className={`h-2 hover:h-8 transition-all duration-200 flex items-center justify-center cursor-pointer group ${isLightMode ? 'hover:bg-blue-50' : 'hover:bg-blue-500/10'}`}
+                                                                        onClick={() => moveStore(selectedStore.store, selectedStore.routeId, route.id, actualIndex)}
+                                                                    >
+                                                                        <div className="w-full h-[1px] bg-blue-500/0 group-hover:bg-blue-500/50 relative flex items-center justify-center">
+                                                                            <span className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-sm transform scale-0 group-hover:scale-100 transition-all">
+                                                                                + Insertar en Posición {actualIndex + 1}
+                                                                            </span>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
 
-                                                                <div className="flex-1 min-w-0">
-                                                                    <p className={`font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                                                                        {store.name_sitio}
-                                                                    </p>
-                                                                    <p className="text-[10px] text-slate-500 truncate">
-                                                                        {store.formatted_address || store.direccion_completa}
-                                                                    </p>
-                                                                </div>
+                                                                <div
+                                                                    className={`px-6 py-3 flex items-center gap-4 cursor-pointer transition-all ${isSelected
+                                                                        ? (isLightMode ? 'bg-blue-100' : 'bg-blue-500/20')
+                                                                        : (isLightMode ? 'hover:bg-slate-100' : 'hover:bg-white/5')
+                                                                        }`}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        if (isSelected) {
+                                                                            setSelectedStore(null);
+                                                                        } else {
+                                                                            setSelectedStore({ store, routeId: route.id });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black ${isSelected
+                                                                        ? 'bg-blue-500 text-white'
+                                                                        : isLightMode ? 'bg-slate-200 text-slate-600' : 'bg-white/10 text-slate-400'
+                                                                        }`}>
+                                                                        {idx + 1}
+                                                                    </div>
 
-                                                                <div className="flex items-center gap-2">
-                                                                    {store.region && (
-                                                                        <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-white/5 text-slate-500'}`}>
-                                                                            {store.region}
-                                                                        </span>
-                                                                    )}
-                                                                    {/* Dropdown para mover tienda directamente */}
-                                                                    <select
-                                                                        value=""
-                                                                        onChange={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (e.target.value) {
-                                                                                moveStore(store, route.id, e.target.value);
-                                                                            }
-                                                                        }}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className={`text-[10px] font-bold rounded-lg px-2 py-1 cursor-pointer ${isLightMode
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className={`font-bold truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                                                                            {store.name_sitio}
+                                                                        </p>
+                                                                        <p className="text-[10px] text-slate-500 truncate">
+                                                                            {store.formatted_address || store.direccion_completa}
+                                                                        </p>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-2">
+                                                                        {store.region && (
+                                                                            <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-1 rounded ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-white/5 text-slate-500'}`}>
+                                                                                {store.region}
+                                                                            </span>
+                                                                        )}
+                                                                        {/* Dropdown Legacy - Mover directamente al final de otra ruta */}
+                                                                        <select
+                                                                            value=""
+                                                                            onChange={(e) => {
+                                                                                e.stopPropagation();
+                                                                                if (e.target.value) {
+                                                                                    moveStore(store, route.id, e.target.value);
+                                                                                }
+                                                                            }}
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            className={`text-[10px] font-bold rounded-lg px-2 py-1 cursor-pointer ${isLightMode
                                                                                 ? 'bg-blue-100 text-blue-700 border-blue-200'
                                                                                 : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                                                                            } border outline-none hover:bg-blue-500/30 transition-colors`}
-                                                                    >
-                                                                        <option value="">📦 Mover a...</option>
-                                                                        {localRoutes
-                                                                            .filter(r => r.id !== route.id)
-                                                                            .map(r => (
-                                                                                <option key={r.id} value={r.id}>
-                                                                                    R-{String(r.id).padStart(2, '0')} | {r.corridorName || r.driverName}
-                                                                                </option>
-                                                                            ))
-                                                                        }
-                                                                    </select>
+                                                                                } border outline-none hover:bg-blue-500/30 transition-colors`}
+                                                                        >
+                                                                            <option value="">📦 Mover a...</option>
+                                                                            {localRoutes
+                                                                                .filter(r => r.id !== route.id)
+                                                                                .map(r => (
+                                                                                    <option key={r.id} value={r.id}>
+                                                                                        R-{String(r.id).padStart(2, '0')} | {r.corridorName || r.driverName}
+                                                                                    </option>
+                                                                                ))
+                                                                            }
+                                                                        </select>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
+                                                            </React.Fragment>
                                                         );
                                                     })}
+
+                                                    {/* Insertion Zone (After Last Item) - Only when targetable */}
+                                                    {isTargetable && filteredStores.length > 0 && (
+                                                        <div
+                                                            className={`h-2 hover:h-8 transition-all duration-200 flex items-center justify-center cursor-pointer group ${isLightMode ? 'hover:bg-blue-50' : 'hover:bg-blue-500/10'}`}
+                                                            onClick={() => moveStore(selectedStore.store, selectedStore.routeId, route.id, route.stops.length)}
+                                                        >
+                                                            <div className="w-full h-[1px] bg-blue-500/0 group-hover:bg-blue-500/50 relative flex items-center justify-center">
+                                                                <span className="opacity-0 group-hover:opacity-100 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-sm transform scale-0 group-hover:scale-100 transition-all">
+                                                                    + Insertar al Final
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
