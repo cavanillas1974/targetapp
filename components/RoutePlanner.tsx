@@ -3268,7 +3268,7 @@ const RoutePlanner: React.FC = () => {
               {/* Header Formal */}
               <div className="flex items-center justify-between border-b-4 border-[#CC0000] pb-8 mb-12">
                 <div className="flex items-center gap-6">
-                  <img src={targetLogo} alt="Target Logo" className="h-24 w-auto object-contain" />
+                  <img src={targetLogo} alt="Target Logo" className="h-48 w-auto object-contain" />
                 </div>
                 <div className="text-right">
                   <h1 className="text-4xl font-black text-[#003399] uppercase tracking-tighter">Cotización</h1>
