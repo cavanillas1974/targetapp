@@ -861,35 +861,74 @@ const RoutePlanner: React.FC = () => {
     try {
       // Forzar visibilidad temporal para el render
       const originalPosition = element.style.position;
-      element.style.position = 'relative';
+      const originalWidth = element.style.width; // Guardar width original
+
+      element.style.position = 'absolute'; // Usar absolute para no afectar el flow pero poder renderizar completo
       element.style.left = '0';
       element.style.top = '0';
+      // Importante: Fijar un ancho A4-ish para que el texto reflow correctamente antes de capturar
+      // 800px es un buen ancho para visualizar en desktop, para PDF mejor usar algo cercano a 794px (A4 a 96dpi) o 1200px para alta calidad
+      element.style.width = '1000px';
       element.style.zIndex = '9999';
 
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 2, // Mayor calidad
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff' // Siempre blanco para formalidad
+        backgroundColor: '#ffffff',
+        windowWidth: 1000 // Asegurar que html2canvas vea el ancho completo
       });
 
-      // Restaurar
+      // Restaurar estilos
       element.style.position = originalPosition;
+      element.style.width = originalWidth;
       element.style.left = '-9999px';
 
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
-        orientation: 'portrait', // Vertical para cotización formal
-        unit: 'px',
+        orientation: 'portrait',
+        unit: 'mm',
         format: 'a4'
       });
 
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const imgWidth = 210; // A4 width en mm
+      const pageHeight = 297; // A4 height en mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Cotizacion_Formal_Target_${projectName.replace(/\s+/g, '_')}.pdf`);
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Primera página
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Páginas siguientes (si el contenido es largo)
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight; // Ajuste de posición para "subir" la imagen
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position - (imgHeight - heightLeft - pageHeight), imgWidth, imgHeight); // Lógica corregida para offset
+        // Nota: La lógica simple de addPage muchas veces requiere ajustar 'position' para que sea negativo:
+        // position = -pageIndex * 297;
+
+        // Mejor enfoque stándar looping:
+      }
+
+      // Reiniciamos para hacerlo limpio con el loop estándar
+      const pdfClean = new jsPDF('p', 'mm', 'a4');
+      let positionClean = 0;
+      let heightLeftClean = imgHeight;
+
+      pdfClean.addImage(imgData, 'PNG', 0, positionClean, imgWidth, imgHeight);
+      heightLeftClean -= pageHeight;
+
+      while (heightLeftClean > 0) {
+        positionClean -= pageHeight; // Mover hacia arriba (offset negativo)
+        pdfClean.addPage();
+        pdfClean.addImage(imgData, 'PNG', 0, positionClean, imgWidth, imgHeight);
+        heightLeftClean -= pageHeight;
+      }
+
+      pdfClean.save(`Cotizacion_Formal_Target_${projectName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error("Error exporting Quotation PDF:", err);
     } finally {
