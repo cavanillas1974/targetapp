@@ -10,8 +10,10 @@ body {
     background-color: #030712;
 }
 
+/* Custom Scrollbar - Vertical */
 .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -19,12 +21,17 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
     border-radius: 10px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Horizontal Scrollbar Styling */
+.custom-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 /* Google Maps Label Styling */
@@ -37,4 +44,44 @@ body {
         0px 0px 4px rgba(0, 0, 0, 0.8);
     font-family: 'Inter', sans-serif;
     transform: translateY(-1px);
+}
+
+/* Gantt Chart Animations */
+@keyframes gantt-pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.gantt-bar-active {
+    animation: gantt-pulse 2s ease-in-out infinite;
+}
+
+/* Tooltip Arrow Fix */
+.tooltip-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 8px;
+    height: 8px;
+    background: inherit;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Light Mode Overrides */
+.light-mode .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.light-mode .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.2);
 }

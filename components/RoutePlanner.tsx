@@ -11,7 +11,10 @@ import ExecutiveReport from './ExecutiveReport';
 import { VisualCalendar } from './VisualCalendar';
 import { exportService } from '../services/exportService';
 import EvidencePortal from './EvidencePortal';
+import { CorridorRouteEngine, DEFAULT_HUBS, MEXICAN_CORRIDORS } from '../services/CorridorRouteEngine';
+import { MasterScheduleGantt } from './MasterScheduleGantt';
 import { CronogramasIdeas } from './CronogramasIdeas';
+import { RouteEditor } from './RouteEditor';
 import {
   ResponsiveContainer,
   BarChart,
@@ -48,7 +51,7 @@ const RoutePlanner: React.FC = () => {
   const [evidenceType, setEvidenceType] = useState<'PHOTO' | 'ACK'>('PHOTO');
   const [evidences, setEvidences] = useState<Evidence[]>([]);
   const [dashboardFilter, setDashboardFilter] = useState<'ALL' | 'PENDING'>('ALL');
-  const [evidenceViewMode, setEvidenceViewMode] = useState<'ROUTES' | 'OPERATIONAL' | 'MOBILE'>('ROUTES');
+  const [evidenceViewMode, setEvidenceViewMode] = useState<'ROUTES' | 'OPERATIONAL' | 'MOBILE' | 'CALENDAR'>('ROUTES');
 
   const [config, setConfig] = useState<PlannerConfig>({
     startDate: new Date().toISOString().split('T')[0],
@@ -84,6 +87,7 @@ const RoutePlanner: React.FC = () => {
 
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [showQuotation, setShowQuotation] = useState(false);
+  const [showRouteEditor, setShowRouteEditor] = useState(false);
 
   const workloadData = useMemo(() => {
     if (optimizedRoutes.length === 0) return [];
@@ -123,8 +127,11 @@ const RoutePlanner: React.FC = () => {
   useEffect(() => {
     if (activeProjectId) {
       localStorage.setItem('iamanos_active_project_id', activeProjectId);
+      localStorage.setItem('iamanos_active_project_name', projectName);
+    } else {
+      localStorage.removeItem('iamanos_active_project_name');
     }
-  }, [activeProjectId]);
+  }, [activeProjectId, projectName]);
 
   const saveProject = (currentSites: SiteRecord[], routes: any[], currentEvidences: Evidence[], currentConfig: PlannerConfig) => {
     try {
@@ -151,7 +158,22 @@ const RoutePlanner: React.FC = () => {
         localStorage.setItem(`iamanos_project_${id}`, JSON.stringify(projectData));
       } catch (e: any) {
         if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-          setError("Memoria Local Llena (Quota Exceeded). Por favor elimine proyectos antiguos para guardar misiones nuevas de gran tamaño.");
+          console.warn("Storage Quota Exceeded - attempting to save stripped version");
+          // Si falla por espacio, intentamos guardar sin raw_data para ahorrar espacio
+          const strippedProject = {
+            ...projectData,
+            sites: projectData.sites.map(s => ({ ...s, raw_data: undefined })),
+            optimizedRoutes: projectData.optimizedRoutes.map(r => ({
+              ...r,
+              stops: r.stops.map((s: any) => ({ ...s, raw_data: undefined }))
+            }))
+          };
+          try {
+            localStorage.setItem(`iamanos_project_${id}`, JSON.stringify(strippedProject));
+          } catch (innerE) {
+            setError("MEMORIA LLENA: El navegador no tiene más espacio disponible. Por favor elimine proyectos antiguos desde el Tablero de Proyectos.");
+            return;
+          }
         } else {
           throw e;
         }
@@ -163,6 +185,32 @@ const RoutePlanner: React.FC = () => {
 
       setProjects(updatedMetadata);
       localStorage.setItem('iamanos_projects_metadata', JSON.stringify(updatedMetadata));
+
+      // Sincronizar rutas para el portal de evidencias (Versión compacta para MOBILE)
+      if (routes.length > 0) {
+        try {
+          // Quitamos datos pesados para la sincronización del portal móvil
+          const lightRoutes = routes.map(r => ({
+            ...r,
+            stops: r.stops.map((s: any) => ({
+              id: s.id,
+              store_job_id: s.store_job_id,
+              site_id: s.site_id,
+              name_sitio: s.name_sitio,
+              lat: s.lat,
+              lng: s.lng,
+              city: s.city,
+              state: s.state,
+              direccion_completa: s.direccion_completa,
+              day_status: s.day_status
+            }))
+          }));
+          localStorage.setItem('iamanos_active_routes', JSON.stringify(lightRoutes));
+        } catch (e) {
+          console.warn("Could not sync active routes to local storage (quota). Mobile portal may not update.");
+        }
+      }
+
       setActiveProjectId(id);
       setLastSaved(new Date().toLocaleTimeString());
     } catch (err: any) {
@@ -206,7 +254,7 @@ const RoutePlanner: React.FC = () => {
   const quotationData = useMemo(() => {
     if (optimizedRoutes.length === 0) return null;
     const totalActualKm = optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0);
-    const quotedKm = totalActualKm * 1.15;
+    const quotedKm = totalActualKm; // Kilometraje real calculado
     let totalRouteDays = 0;
     optimizedRoutes.forEach(route => {
       const uniqueDays = new Set(route.stops.map((s: any) => s.scheduled_date).filter(Boolean));
@@ -415,33 +463,29 @@ const RoutePlanner: React.FC = () => {
           );
           setFileHeaders(originalHeaders);
 
-          const headers = originalHeaders.map(h => h.toUpperCase());
+          const headers = originalHeaders.map(h => h.toUpperCase().trim());
 
-          // Paso 1 — Validación de columnas exactas (STOP si falla)
-          const requiredColumns = [
-            'ID_TIENDA', 'NOMBRE_TIENDA', 'MARCA', 'REGION', 'RANKING',
-            'CIUDAD', 'ESTADO', 'ALCALDIA_MUNICIPIO', 'CP', 'COLONIA', 'DIRECCION_COMPLETA'
-          ];
+          // Búsqueda inteligente de columnas (Lax Mapping)
+          const findCol = (possibilities: string[]) => {
+            for (const p of possibilities) {
+              const idx = headers.findIndex(h => h === p.toUpperCase() || h.includes(p.toUpperCase()));
+              if (idx !== -1) return idx;
+            }
+            return -1;
+          };
 
-          const missing = requiredColumns.filter(rc => !headers.includes(rc));
-          if (missing.length > 0) {
-            setError(`Falta columna: ${missing.join(', ')}`);
-            return;
-          }
-
-          const getIdx = (name: string) => headers.indexOf(name);
           const idxs = {
-            id: getIdx('ID_TIENDA'),
-            name: getIdx('NOMBRE_TIENDA'),
-            marca: getIdx('MARCA'),
-            region: getIdx('REGION'),
-            ranking: getIdx('RANKING'),
-            city: getIdx('CIUDAD'),
-            state: getIdx('ESTADO'),
-            municipio: getIdx('ALCALDIA_MUNICIPIO'),
-            cp: getIdx('CP'),
-            colonia: getIdx('COLONIA'),
-            address: getIdx('DIRECCION_COMPLETA')
+            id: findCol(['ID_TIENDA', 'ID', 'CODIGO', 'SITE_ID', 'SITIO_ID', 'ID SITIO']),
+            name: findCol(['NOMBRE_TIENDA', 'NOMBRE', 'SITE_NAME', 'TIENDA', 'SITIO', 'NOMBRE SITIO']),
+            marca: findCol(['MARCA', 'CLIENTE', 'BRAND', 'NEGOCIO']),
+            region: findCol(['REGION', 'ZONA', 'AREA', 'TERRITORIO']),
+            ranking: findCol(['RANKING', 'PRIORIDAD', 'IMPORTANCIA', 'NIVEL']),
+            city: findCol(['CIUDAD', 'CITY', 'LOCALIDAD', 'POBLACION']),
+            state: findCol(['ESTADO', 'STATE', 'ENTIDAD', 'PROVINCIA']),
+            municipio: findCol(['ALCALDIA_MUNICIPIO', 'MUNICIPIO', 'ALCALDIA', 'DELEGACION']),
+            cp: findCol(['CP', 'CODIGO POSTAL', 'POSTAL_CODE', 'ZIP']),
+            colonia: findCol(['COLONIA', 'NEIGHBORHOOD', 'BARRIO', 'FRACCIONAMIENTO']),
+            address: findCol(['DIRECCION_COMPLETA', 'DIRECCION', 'ADDRESS', 'CALLE_Y_NUMERO', 'CALLE'])
           };
 
           const data = rows.slice(1).map((row, i) => {
@@ -453,17 +497,17 @@ const RoutePlanner: React.FC = () => {
             });
 
             const rawSite: Partial<SiteRecord> = {
-              site_id: cols[idxs.id],
-              name_sitio: cols[idxs.name],
-              marca: cols[idxs.marca],
-              region: cols[idxs.region],
-              ranking: cols[idxs.ranking],
-              city: cols[idxs.city],
-              state: cols[idxs.state],
-              municipio: cols[idxs.municipio],
-              cp: cols[idxs.cp],
-              colonia: cols[idxs.colonia],
-              direccion_completa: cols[idxs.address],
+              site_id: (idxs.id !== -1 ? cols[idxs.id] : '') || `T-${1000 + i}`,
+              name_sitio: (idxs.name !== -1 ? cols[idxs.name] : '') || `TIENDA ${1000 + i}`,
+              marca: (idxs.marca !== -1 ? cols[idxs.marca] : '') || 'TIENDA',
+              region: (idxs.region !== -1 ? cols[idxs.region] : '') || 'CENTRO',
+              ranking: (idxs.ranking !== -1 ? cols[idxs.ranking] : '') || 'B',
+              city: (idxs.city !== -1 ? cols[idxs.city] : '') || '',
+              state: (idxs.state !== -1 ? cols[idxs.state] : '') || '',
+              municipio: (idxs.municipio !== -1 ? cols[idxs.municipio] : '') || '',
+              cp: (idxs.cp !== -1 ? cols[idxs.cp] : '') || '',
+              colonia: (idxs.colonia !== -1 ? cols[idxs.colonia] : '') || '',
+              direccion_completa: (idxs.address !== -1 ? cols[idxs.address] : '') || 'DIRECCIÓN NO PROPORCIONADA',
               raw_data
             };
 
@@ -751,145 +795,71 @@ const RoutePlanner: React.FC = () => {
     setIsGenerating(true);
     setError(null);
     try {
-      console.log("Iniciando Misión AntiGravity: Motor de Optimización...");
+      console.log("🚀 Iniciando Misión AntiGravity: MOTOR DE CORREDORES GEOGRÁFICOS...");
+      console.log("📋 Reglas activas:");
+      console.log("   ✓ Rutas ilimitadas en paralelo por continuidad geográfica");
+      console.log("   ✓ Hub configurable por ruta (default: CDMX)");
+      console.log("   ✓ Todas las rutas inician el mismo día");
+      console.log("   ✓ Avance continuo SIN regreso al hub");
+      console.log("   ✓ Pernocta cerca de la siguiente tienda");
+      console.log("   ✓ Sin mezcla de regiones, sin zig-zag");
 
-      // Paso 5 — Calcular rutas/cuadrillas (AUTO o MANUAL)
-      const stores_programables = sites.filter(s => s.status === AddressStatus.OK || s.status === AddressStatus.WARNING);
-      const origin = { lat: depots[0].lat, lng: depots[0].lng };
+      // Configurar hub default desde depots
+      const defaultHub = {
+        id: depots[0].id,
+        name: depots[0].name,
+        lat: depots[0].lat,
+        lng: depots[0].lng,
+        city: depots[0].name
+      };
 
-      const startDate = new Date(config.startDate + 'T00:00:00');
-      const endDate = new Date(config.endDate + 'T23:59:59');
-      let workingDaysCount = 0;
-      const dateList: string[] = [];
-      let cur = new Date(startDate);
-      while (cur <= endDate) {
-        if (cur.getDay() !== 0) {
-          workingDaysCount++;
-          const y = cur.getFullYear();
-          const m = (cur.getMonth() + 1).toString().padStart(2, '0');
-          const d = cur.getDate().toString().padStart(2, '0');
-          dateList.push(`${y}-${m}-${d}`);
+      // Generar rutas por corredores
+      const corridorRoutes = await CorridorRouteEngine.generateCorridorRoutes(
+        sites,
+        {
+          startDate: config.startDate,
+          stopsPerDay: config.stopsPerDayPerRoute,
+          avgServiceMinutes: config.avgServiceMinutesPerStop,
+          bufferMinutes: config.bufferMinutesPerDay,
+          defaultHub
         }
-        cur.setDate(cur.getDate() + 1);
-      }
+      );
 
-      let routes_total = 0;
-      if (config.routesMode === RoutesMode.MANUAL) {
-        routes_total = config.routesTotalManual || 10;
-      } else {
-        routes_total = Math.ceil(stores_programables.length / (workingDaysCount * config.stopsPerDayPerRoute));
-      }
-
-      // Validación de capacidad (hard)
-      const capacity = routes_total * workingDaysCount * config.stopsPerDayPerRoute;
-      if (capacity < stores_programables.length) {
-        setError(`CAPACIDAD INSUFICIENTE. Tienes ${stores_programables.length} tiendas programables pero solo capacidad para ${capacity}. Por favor aumenta el número de cuadrillas, los días de trabajo o las paradas por día.`);
+      if (corridorRoutes.length === 0) {
+        setError("No se generaron rutas. Verifica que las tiendas estén geocodificadas correctamente.");
         setIsGenerating(false);
         return;
       }
 
-      // Paso 6 y 7 — Crear cuadrillas y asignar tiendas (bearing asc, dist asc)
-      const routeClusters = LogicEngine.assignToRoutes(stores_programables, routes_total, origin);
+      // Convertir al formato legacy para compatibilidad con la UI existente
+      const allRoutesData = CorridorRouteEngine.convertToLegacyFormat(corridorRoutes, depots[0].id);
 
-      const allRoutesData: any[] = [];
-      const routeColorsPool = [
-        '#2298E0', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899',
-        '#06b6d4', '#f97316', '#14b8a6', '#6366f1', '#a855f7', '#d946ef'
-      ];
+      console.log(`\n📊 RESUMEN DE RUTAS GENERADAS:`);
+      console.log(`   📍 Total de rutas/corredores: ${allRoutesData.length}`);
+      console.log(`   🏪 Total de tiendas programadas: ${allRoutesData.reduce((acc, r) => acc + r.stops.length, 0)}`);
+      console.log(`   📅 Fecha de inicio (todas las rutas): ${config.startDate}`);
 
-      // Paso 8, 9, 10 — Secuencia, Programación y Tiempos
-      for (let i = 0; i < routeClusters.length; i++) {
-        const cluster = routeClusters[i];
-        const routeId = (i + 1).toString().padStart(2, '0');
+      allRoutesData.forEach((route, idx) => {
+        const totalDays = route.scheduledDays?.length || 0;
+        console.log(`\n   🚐 RUTA ${route.id} - ${route.corridorName}`);
+        console.log(`      → Dirección: ${route.direction}`);
+        console.log(`      → Tiendas: ${route.stops.length}`);
+        console.log(`      → Días: ${totalDays}`);
+        console.log(`      → KM Total: ${Math.round(route.totalKm)}`);
 
-        // Secuencia dentro de cada cuadrilla (vecino más cercano sucesivo)
-        const sequenced = LogicEngine.sequenceRoute(cluster, origin);
-
-        const routeStopsScheduled: SiteRecord[] = [];
-        let stopIdx = 0;
-        let km_route_running_total = 0;
-
-        for (const date of dateList) {
-          if (stopIdx >= sequenced.length) break;
-
-          const stopsToday = sequenced.slice(stopIdx, stopIdx + config.stopsPerDayPerRoute);
-
-          // Paso 9.2 — Inicio de cada día (pernocta)
-          let dayStartPoint = origin;
-          if (routeStopsScheduled.length > 0) {
-            const lastStop = routeStopsScheduled[routeStopsScheduled.length - 1];
-            dayStartPoint = { lat: lastStop.lat!, lng: lastStop.lng! };
-          }
-
-          // OPTIMIZACIÓN DE WAYPOINTS (Petición USER 2)
-          // Reordenar las paradas del día para minimizar kilometraje real
-          const optimizedStopsToday = await googleMapsService.optimizeWaypointOrder(dayStartPoint, stopsToday);
-
-          // Paso 10 — Kilometraje y tiempos reales (Directions API + Distance Matrix)
-          const dayResults = await googleMapsService.getRouteDistance(dayStartPoint, optimizedStopsToday, false);
-
-          const km_day_total = dayResults ? dayResults.distance : LogicEngine.estimateRouteDistance(dayStartPoint, optimizedStopsToday, false);
-          const minutes_travel_day_total = dayResults ? dayResults.duration : Math.round(km_day_total * 1.5 + 20);
-
-          const minutes_service_day_total = optimizedStopsToday.length * config.avgServiceMinutesPerStop;
-          const minutes_day_total = minutes_travel_day_total + minutes_service_day_total + config.bufferMinutesPerDay;
-
-          // VALIDACIÓN DE "SALTOS IMPOSIBLES" (Petición USER 3)
-          // Umbral de 500km o 10h de manejo puro
-          const hasImpossibleJump = km_day_total > 500 || (minutes_travel_day_total / 60) > 8;
-
-          // Marcar OVERTIME (> 12h = 720m) o IMPOSSIBLE
-          let day_status: "OK" | "OVERTIME" | "WARNING" = "OK";
-          if (hasImpossibleJump) day_status = "WARNING";
-          else if (minutes_day_total > 720) day_status = "OVERTIME";
-
-          optimizedStopsToday.forEach((s, idxInDay) => {
-            const store_job_id = `${routeId}_${s.site_id}_${date}_${idxInDay + 1}`;
-            (s as any).store_job_id = store_job_id;
-            s.date = date;
-            s.routeId = routeId;
-            s.scheduled_date = date;
-            s.stop_in_day = idxInDay + 1;
-            s.day_in_project = dateList.indexOf(date) + 1;
-            s.sequence_in_route = stopIdx + idxInDay + 1;
-
-            // Adjuntar métricas
-            (s as any).km_day_total = km_day_total;
-            (s as any).minutes_travel_day_total = minutes_travel_day_total;
-            (s as any).minutes_service_day_total = minutes_service_day_total;
-            (s as any).minutes_day_total = minutes_day_total;
-            (s as any).day_status = day_status;
-            if (hasImpossibleJump) (s as any).notes = "⚠️ SALTO DE RUTA INVIABLE (>500KM)";
-
-            routeStopsScheduled.push(s);
+        // Log de pernoctas
+        if (route.scheduledDays) {
+          route.scheduledDays.forEach((day: any) => {
+            if (day.overnightLocation) {
+              console.log(`      🏨 Día ${day.dayNumber}: Pernocta en ${day.overnightLocation.name} (${day.overnightLocation.distanceToNextStore}km de siguiente tienda)`);
+            }
           });
-
-          km_route_running_total += km_day_total;
-          stopIdx += stopsToday.length;
         }
-
-        const firstStore = routeStopsScheduled.length > 0 ? routeStopsScheduled[0].name_sitio : "ORIGEN";
-        const lastStore = routeStopsScheduled.length > 0 ? routeStopsScheduled[routeStopsScheduled.length - 1].name_sitio : "DESTINO";
-
-        allRoutesData.push({
-          id: routeId,
-          depotId: depots[0].id,
-          base: depots[0].name,
-          driverName: `${firstStore} → ${lastStore}`,
-          secondaryDriverName: "CUADRILLA ASIGNADA",
-          stops: routeStopsScheduled,
-          allAssignedStops: cluster,
-          totalKm: km_route_running_total,
-          estTimeMinutes: routeStopsScheduled.reduce((acc, s) => acc + (s as any).minutes_day_total, 0),
-          color: routeColorsPool[i % routeColorsPool.length],
-          startDate: config.startDate,
-          endDate: config.endDate,
-          date: config.startDate // Para agrupamiento predeterminado
-        });
-      }
+      });
 
       setOptimizedRoutes(allRoutesData);
-      // Actualizar sitios para la hoja de validación
+
+      // Actualizar sitios con la información de ruteo
       const finalSites = sites.map(s => {
         const found = allRoutesData.flatMap(r => r.stops).find(st => st.id === s.id);
         if (found) return found;
@@ -898,8 +868,13 @@ const RoutePlanner: React.FC = () => {
       setSites(finalSites);
       saveProject(finalSites, allRoutesData, evidences, config);
       setActiveStep(4);
+
+      console.log("\n✅ MISIÓN ANTIGRAVITY COMPLETADA");
+      console.log("   Todas las rutas configuradas para inicio simultáneo");
+      console.log("   Avance continuo habilitado (sin regreso al hub)");
+
     } catch (err: any) {
-      console.error("Critical error generating schedule:", err);
+      console.error("❌ Error crítico en Misión AntiGravity:", err);
       setError("Fallo crítico en Misión AntiGravity: " + (err.message || "Error desconocido"));
     } finally {
       setIsGenerating(false);
@@ -959,14 +934,24 @@ const RoutePlanner: React.FC = () => {
       <div className={`${isLightMode ? 'bg-white/80 border-slate-200 shadow-lg' : 'bg-slate-900/40 border-white/5 shadow-2xl'} backdrop-blur-2xl border-b px-12 py-8 flex items-center justify-between sticky top-0 z-50`}>
         <div className="flex items-center gap-10">
           <div className="flex items-center gap-6">
-            <div className="w-32 h-32 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl shadow-blue-600/20 rotate-3 transition-transform hover:rotate-0 cursor-pointer overflow-hidden p-4" onClick={() => setActiveStep(0)}>
-              <img src="./images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
-            </div>
+            <button
+              onClick={() => setActiveStep(0)}
+              className="px-8 py-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-3xl text-[10px] font-black uppercase tracking-[0.3em] transition-all hover:scale-105 active:scale-95 flex items-center gap-3 shadow-xl"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
+              PROYECTOS
+            </button>
             <div>
               <h1 className={`text-4xl font-black tracking-tighter italic flex items-center gap-8 ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                 <div className="flex flex-col items-start text-left">
-                  <img src="./images/logo.png" alt="Target" className="h-20 w-auto" />
-                  <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mt-1">Control Center</p>
+                  <p className="text-[18px] font-black tracking-tighter italic text-white mb-0 leading-none group-hover:text-blue-500 transition-colors flex items-center gap-2">
+                    {projectName && <span className="text-blue-500 text-[10px] not-italic mr-1">PROJECT:</span>}
+                    {projectName ? projectName.toUpperCase() : 'TARGET'}
+                    {!projectName && <span className="text-blue-500">®</span>}
+                  </p>
+                  <p className="text-[9px] font-black text-blue-500 uppercase tracking-[0.4em] mt-1">
+                    {projectName ? 'Misión Activa' : 'Control Center'}
+                  </p>
                 </div>
                 <div className="h-12 w-px bg-white/10 mx-2"></div>
                 <div className="flex flex-col items-start gap-1">
@@ -1092,7 +1077,12 @@ const RoutePlanner: React.FC = () => {
                       </div>
                       <span className="text-[10px] font-bold text-slate-500 italic">{new Date(p.updatedAt).toLocaleDateString()}</span>
                     </div>
-                    <h4 className={`text-[10px] font-black uppercase tracking-tighter italic mb-4 group-hover:text-blue-500 transition-colors break-words line-clamp-2 leading-tight h-8 overflow-hidden ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{p.name}</h4>
+                    <div className="mb-4">
+                      <p className="text-[9px] font-black text-blue-500 uppercase tracking-[0.2em] mb-1">PROYECTO:</p>
+                      <h4 className={`text-xl font-black uppercase italic tracking-tighter group-hover:text-blue-500 transition-colors break-words line-clamp-2 leading-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                        {p.name}
+                      </h4>
+                    </div>
                     <div className="flex items-center gap-6 mt-8">
                       <div>
                         <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Tiendas</p>
@@ -1113,16 +1103,55 @@ const RoutePlanner: React.FC = () => {
 
         {/* PASO 1: INGESTA */}
         {activeStep === 1 && (
-          <div className={`${isLightMode ? 'bg-white border-slate-200 shadow-xl' : 'bg-slate-900/40 border-white/5 shadow-2xl backdrop-blur-3xl'} p-20 rounded-[4rem] border shadow-2xl flex flex-col items-center justify-center text-center py-32 animate-in zoom-in duration-500`}>
+          <div className={`${isLightMode ? 'bg-white border-slate-200 shadow-xl' : 'bg-slate-900/40 border-white/5 shadow-2xl backdrop-blur-3xl'} p-20 rounded-[4rem] border shadow-2xl flex flex-col items-center justify-center text-center py-20 animate-in zoom-in duration-500`}>
+
+            {/* Project Name Input Section */}
+            <div className="mb-16 w-full max-w-2xl">
+              <div className="flex items-center gap-4 justify-center mb-6">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                  <span className="text-2xl">📁</span>
+                </div>
+                <div className="text-left">
+                  <p className="text-[9px] font-black text-blue-500 uppercase tracking-[0.4em]">Paso 1 de 4</p>
+                  <h3 className={`text-2xl font-black uppercase italic tracking-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                    Crear Nuevo Proyecto
+                  </h3>
+                </div>
+              </div>
+
+              <div className={`${isLightMode ? 'bg-slate-50 border-slate-200' : 'bg-slate-800/40 border-white/10'} rounded-3xl border p-8`}>
+                <label className="block text-left mb-3">
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nombre del Proyecto</span>
+                </label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="Ej: DESPLIEGUE_TARGET_FEBRERO_2026"
+                  className={`w-full px-6 py-4 rounded-2xl text-lg font-bold ${isLightMode
+                    ? 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400'
+                    : 'bg-slate-900/60 border-white/10 text-white placeholder:text-slate-600'
+                    } border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none`}
+                />
+                <p className="text-[10px] text-slate-500 mt-3 text-left">
+                  💡 Usa un nombre descriptivo para identificar fácilmente este proyecto
+                </p>
+              </div>
+            </div>
+
+            {/* File Upload Section */}
             <label
               htmlFor="master-upload"
-              className={`w-40 h-40 rounded-[3.5rem] flex items-center justify-center mb-12 border-2 shadow-3xl group cursor-pointer transition-all ${isLightMode ? 'bg-blue-50 border-blue-100 hover:border-blue-500' : 'bg-blue-600/10 border-blue-600/20 hover:border-blue-500/50'}`}
+              className={`w-32 h-32 rounded-[2.5rem] flex items-center justify-center mb-8 border-2 shadow-3xl group cursor-pointer transition-all ${projectName.trim()
+                ? (isLightMode ? 'bg-blue-50 border-blue-100 hover:border-blue-500' : 'bg-blue-600/10 border-blue-600/20 hover:border-blue-500/50')
+                : 'opacity-50 cursor-not-allowed bg-slate-800/20 border-slate-700'
+                }`}
             >
-              <svg className="group-hover:scale-110 transition-transform" width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#2298E0" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+              <svg className={`transition-transform ${projectName.trim() ? 'group-hover:scale-110' : ''}`} width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={projectName.trim() ? "#2298E0" : "#666"} strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
             </label>
-            <h2 className={`text-5xl font-black tracking-tighter mb-6 italic uppercase ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Cargar Universo de Datos</h2>
-            <p className={`${isLightMode ? 'text-slate-500' : 'text-slate-400'} text-xl max-w-2xl mx-auto leading-relaxed font-medium`}>
-              Inicia la optimización subiendo tu archivo maestro. El sistema realizará una **limpieza GIS predictiva** instantáneamente.
+            <h2 className={`text-4xl font-black tracking-tighter mb-4 italic uppercase ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Cargar Universo de Datos</h2>
+            <p className={`${isLightMode ? 'text-slate-500' : 'text-slate-400'} text-lg max-w-xl mx-auto leading-relaxed font-medium`}>
+              El sistema realizará una <strong>limpieza GIS predictiva</strong> automáticamente.
             </p>
             <input
               type="file"
@@ -1130,22 +1159,33 @@ const RoutePlanner: React.FC = () => {
               className="hidden"
               onChange={handleFileUpload}
               accept=".csv"
+              disabled={!projectName.trim()}
             />
             <label
               htmlFor="master-upload"
-              className="mt-16 px-16 py-8 bg-blue-600 hover:bg-blue-500 text-white rounded-[2.5rem] font-black uppercase tracking-[0.4em] text-sm shadow-[0_32px_64px_-16px_rgba(37,99,235,0.4)] transition-all hover:scale-105 active:scale-95 cursor-pointer inline-flex items-center gap-6"
+              className={`mt-10 px-12 py-6 rounded-[2rem] font-black uppercase tracking-[0.3em] text-sm shadow-[0_32px_64px_-16px_rgba(37,99,235,0.4)] transition-all inline-flex items-center gap-4 ${projectName.trim()
+                ? 'bg-blue-600 hover:bg-blue-500 text-white hover:scale-105 active:scale-95 cursor-pointer'
+                : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                }`}
             >
-              Seleccionar Archivo Maestro
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+              {projectName.trim() ? 'Seleccionar Archivo CSV' : 'Ingresa nombre del proyecto'}
             </label>
+
+            {!projectName.trim() && (
+              <p className="mt-6 text-amber-500 text-sm font-bold animate-pulse">
+                ⚠️ Por favor, ingresa un nombre para el proyecto antes de continuar
+              </p>
+            )}
 
             <button
               onClick={() => setActiveStep(0)}
-              className="mt-12 text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] hover:text-white transition-colors"
+              className="mt-10 text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] hover:text-white transition-colors"
             >
               ← Volver al Tablero de Proyectos
             </button>
 
-            <div className="mt-24 w-full text-left">
+            <div className="mt-16 w-full text-left">
               <CronogramasIdeas isLightMode={isLightMode} />
             </div>
           </div>
@@ -1155,6 +1195,9 @@ const RoutePlanner: React.FC = () => {
           <div className="space-y-12 animate-in slide-in-from-bottom-8 duration-700">
             <div className={`${isLightMode ? 'bg-white border-slate-200 shadow-xl' : 'bg-slate-800/20 border-white/5 shadow-2xl'} backdrop-blur-3xl p-12 rounded-[4rem] border flex flex-col md:flex-row md:items-center justify-between gap-12`}>
               <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] italic animate-pulse">PROJECT: {projectName}</p>
+                </div>
                 <h3 className={`text-4xl font-black tracking-tight flex items-center gap-6 italic uppercase ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                   Limpieza Masiva
                   <span className="bg-blue-500/10 text-blue-400 text-xs px-5 py-2 rounded-full border border-blue-500/20 not-italic tracking-widest">{sites.length} Tiendas</span>
@@ -1179,7 +1222,8 @@ const RoutePlanner: React.FC = () => {
 
             <div className={`${isLightMode ? 'bg-white border-slate-200 shadow-xl' : 'bg-slate-900/60 border-white/5 shadow-[0_64px_128px_-32px_rgba(0,0,0,0.6)]'} rounded-[4rem] overflow-hidden border backdrop-blur-md`}>
               <div className={`p-10 ${isLightMode ? 'bg-slate-50 text-slate-400 border-slate-200' : 'bg-white/[0.02] text-slate-500 border-white/5'} text-[10px] font-black uppercase tracking-[0.3em] grid grid-cols-12 gap-8 border-b font-mono`}>
-                <span className="col-span-3">{fileHeaders.find(h => ['NOMBRE', 'TIENDA', 'SITIO', 'NAME'].some(a => h.toUpperCase().includes(a))) || 'Tienda / Sitio'}</span>
+                <span className="col-span-1">#</span>
+                <span className="col-span-2">{fileHeaders.find(h => ['NOMBRE', 'TIENDA', 'SITIO', 'NAME'].some(a => h.toUpperCase().includes(a))) || 'Tienda / Sitio'}</span>
                 <span className="col-span-1">{fileHeaders.find(h => h.toUpperCase().includes('ID')) || 'ID Sitio'}</span>
                 <span className="col-span-1">{fileHeaders.find(h => h.toUpperCase().includes('REGION')) || 'Región'}</span>
                 <span className="col-span-5">{fileHeaders.find(h => h.toUpperCase().includes('DIRECC')) || 'Dirección Ejecutiva'}</span>
@@ -1188,7 +1232,10 @@ const RoutePlanner: React.FC = () => {
               <div className={`divide-y ${isLightMode ? 'divide-slate-100' : 'divide-slate-800/50'} max-h-[500px] overflow-y-auto custom-scrollbar`}>
                 {sites.map((site, i) => (
                   <div key={i} className={`p-8 grid grid-cols-12 gap-6 text-sm items-center transition-all group ${isLightMode ? 'hover:bg-slate-50 border-b border-slate-50' : 'hover:bg-slate-800/40 border-b border-white/[0.02]'}`}>
-                    <div className="col-span-3">
+                    <div className="col-span-1 font-mono font-black text-blue-500">
+                      {i + 1}
+                    </div>
+                    <div className="col-span-2">
                       <p className={`font-black uppercase italic ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{site.name_sitio}</p>
                     </div>
                     <div className="col-span-1">
@@ -1233,7 +1280,19 @@ const RoutePlanner: React.FC = () => {
         )}
 
         {activeStep === 3 && (
-          <div className="max-w-6xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-12 duration-1000">
+          <div className="max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-12 duration-1000">
+            {/* Project Name Header */}
+            <div className="flex items-center justify-between px-2">
+              <div>
+                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] mb-2 italic animate-pulse">PROJECT: {projectName}</p>
+                <h2 className={`text-3xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{projectName || 'Sin Nombre'}</h2>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+                <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">Fase de Optimización</span>
+              </div>
+            </div>
+
             {/* ALERT: PROJECT CAPACITY */}
             <div className={`p-8 rounded-[3rem] border-4 transition-all flex flex-col md:flex-row items-center gap-8 ${projectCapacity.status === CapacityStatus.SUFFICIENT ? (isLightMode ? 'bg-emerald-50 border-emerald-100' : 'bg-emerald-500/10 border-emerald-500/20') : 'bg-red-500/10 border-red-500/30'}`}>
               <div className={`w-20 h-20 rounded-3xl flex items-center justify-center text-4xl ${projectCapacity.status === CapacityStatus.SUFFICIENT ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
@@ -1430,6 +1489,18 @@ const RoutePlanner: React.FC = () => {
 
         {activeStep === 4 && (
           <div className="space-y-10 animate-in zoom-in-95 duration-700">
+            {/* Project Name Header */}
+            <div className="flex items-center justify-between px-2">
+              <div>
+                <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] mb-2 italic animate-pulse">PROJECT: {projectName}</p>
+                <h2 className={`text-3xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{projectName || 'Sin Nombre'}</h2>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Optimización Completa</span>
+              </div>
+            </div>
+
             {/* KPI Dashboard Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
               {[
@@ -1490,10 +1561,10 @@ const RoutePlanner: React.FC = () => {
                             type="monotone"
                             dataKey={d.name}
                             stroke={d.color}
-                            strokeWidth={4}
-                            dot={{ r: 4, strokeWidth: 2, fill: d.color }}
-                            activeDot={{ r: 8, strokeWidth: 0 }}
-                            animationDuration={1500}
+                            strokeWidth={5}
+                            dot={{ r: 6, strokeWidth: 3, fill: d.color, stroke: '#fff' }}
+                            activeDot={{ r: 9, strokeWidth: 0 }}
+                            animationDuration={2000}
                           />
                         ))}
                       </LineChart>
@@ -1504,6 +1575,183 @@ const RoutePlanner: React.FC = () => {
                       <p className="text-[10px] font-black uppercase mt-4 tracking-widest">Sin datos de cronograma</p>
                     </div>
                   )}
+                </div>
+
+                {/* Timeline de Rutas Mejorado - FECHAS (Solicitud Usuario V5) */}
+                <div className="mt-10 pt-10 border-t border-white/5">
+                  {/* Header con BASE_CDMX */}
+                  <div className="flex justify-center mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+                      <span className="text-blue-500 text-xs font-black uppercase tracking-[0.3em]">BASE_CDMX</span>
+                    </div>
+                  </div>
+
+                  {/* Calcular fechas dinámicamente */}
+                  {(() => {
+                    // Obtener todas las fechas del proyecto
+                    const allDates = optimizedRoutes.flatMap(r =>
+                      r.scheduledDays?.map((d: any) => d.date) ||
+                      r.stops.filter((s: any) => s.scheduled_date).map((s: any) => s.scheduled_date) || []
+                    ).filter(Boolean);
+
+                    // Si no hay fechas, usar las del config
+                    let projectDates: string[] = [];
+                    if (allDates.length > 0) {
+                      const sorted = [...new Set(allDates)].sort() as string[];
+                      projectDates = sorted;
+                    } else {
+                      // Generar fechas desde config
+                      const start = new Date(config.startDate + 'T00:00:00');
+                      const end = new Date(config.endDate + 'T00:00:00');
+                      const dates: string[] = [];
+                      const current = new Date(start);
+                      while (current <= end) {
+                        if (config.workDays.includes(current.getDay())) {
+                          dates.push(current.toISOString().split('T')[0]);
+                        }
+                        current.setDate(current.getDate() + 1);
+                      }
+                      projectDates = dates;
+                    }
+
+                    const startDate = projectDates.length > 0 ? new Date(projectDates[0] + 'T00:00:00') : new Date();
+                    const endDate = projectDates.length > 0 ? new Date(projectDates[projectDates.length - 1] + 'T00:00:00') : new Date();
+                    const totalDays = projectDates.length;
+
+                    // Limitar a 15 fechas visibles para no saturar
+                    const visibleDates = projectDates.slice(0, Math.min(15, projectDates.length));
+
+                    const formatDate = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                    const formatDateShort = (dateStr: string) => {
+                      const d = new Date(dateStr + 'T00:00:00');
+                      return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                    };
+
+                    // Colores vibrantes por ruta
+                    const routeColors = [
+                      'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                      'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                      'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                      'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                      'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+                      'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                      'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+                      'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+                    ];
+
+                    return (
+                      <>
+                        {/* Título con Fechas Dinámicas */}
+                        <div className="flex items-center justify-between mb-6">
+                          <div>
+                            <h5 className="text-base font-black uppercase tracking-tight text-white italic">Timeline de Ejecución Diaria</h5>
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
+                              Estimación de slots operativos {formatDate(startDate)} - {formatDate(endDate)} ({totalDays} días)
+                            </p>
+                          </div>
+                          <div className="flex gap-6">
+                            <span className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase">
+                              <div className="w-8 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"></div>
+                              TRÁNSITO/SERVICIO
+                            </span>
+                            <span className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase">
+                              <div className="w-3 h-3 rounded-full bg-white/20 border border-white/30"></div>
+                              DISPONIBLE
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Eje de FECHAS y rutas */}
+                        <div className="overflow-x-auto custom-scrollbar">
+                          <div className="min-w-[800px]">
+                            {/* Date Headers */}
+                            <div className="flex ml-20 border-b border-white/10 pb-3 mb-4">
+                              {visibleDates.map((dateStr, idx) => {
+                                const d = new Date(dateStr + 'T00:00:00');
+                                const dayName = d.toLocaleDateString('es-MX', { weekday: 'short' });
+                                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                                return (
+                                  <div
+                                    key={dateStr}
+                                    className="flex-1 text-center px-1"
+                                    style={{ minWidth: '50px' }}
+                                  >
+                                    <p className={`text-[8px] font-black uppercase tracking-wider ${isWeekend ? 'text-orange-500' : 'text-slate-600'}`}>
+                                      {dayName}
+                                    </p>
+                                    <p className={`text-[9px] font-black ${isWeekend ? 'text-orange-400' : 'text-slate-400'}`}>
+                                      {formatDateShort(dateStr)}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                              {projectDates.length > 15 && (
+                                <div className="flex-1 text-center px-1" style={{ minWidth: '50px' }}>
+                                  <p className="text-[8px] font-black text-slate-600">...</p>
+                                  <p className="text-[9px] font-black text-slate-500">+{projectDates.length - 15}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Route Bars Container with Scroll */}
+                            <div className="max-h-[400px] overflow-y-auto custom-scrollbar pr-2 space-y-3">
+                              {optimizedRoutes.map((route, rIdx) => {
+                                const totalStops = route.stops.length;
+                                const routeDays = route.scheduledDays?.length || Math.ceil(totalStops / config.stopsPerDayPerRoute);
+
+                                // Calcular posición de inicio y duración en base a fechas
+                                const routeStartDate = route.startDate || route.scheduledDays?.[0]?.date || config.startDate;
+                                const routeStartIdx = projectDates.indexOf(routeStartDate);
+                                const leftPerc = Math.max(0, (routeStartIdx / Math.min(15, projectDates.length)) * 100);
+                                const widthPerc = Math.min(100 - leftPerc, (routeDays / Math.min(15, projectDates.length)) * 100);
+
+                                return (
+                                  <div key={route.id} className="flex items-center gap-3 group">
+                                    <div className="w-16 flex items-center gap-2 shrink-0">
+                                      <div className="w-3 h-3 rounded-full shadow-lg" style={{ backgroundColor: route.color }}></div>
+                                      <span className="text-[10px] font-black text-white uppercase tracking-tight">R-{String(route.id).padStart(2, '0')}</span>
+                                    </div>
+                                    <div className="flex-1 h-9 bg-black/20 rounded-full relative overflow-hidden border border-white/5 group-hover:bg-black/30 transition-all">
+                                      <div
+                                        className="absolute h-full rounded-full shadow-lg transition-all flex items-center justify-center"
+                                        style={{
+                                          left: `${leftPerc}%`,
+                                          width: `${Math.max(15, widthPerc)}%`,
+                                          background: routeColors[rIdx % routeColors.length],
+                                          minWidth: '80px'
+                                        }}
+                                      >
+                                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-black/10 rounded-full"></div>
+                                        <span className="relative text-[9px] font-black text-white uppercase tracking-tight flex items-center gap-1 whitespace-nowrap px-2">
+                                          {totalStops} TIENDAS <span className="text-white/50">|</span> {Math.round(route.totalKm)}KM
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Footer Stats */}
+                            <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                              <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                                {optimizedRoutes.length} RUTAS • {optimizedRoutes.reduce((acc, r) => acc + r.stops.length, 0)} TIENDAS • {Math.round(optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0)).toLocaleString()} KM
+                              </p>
+                              <button
+                                onClick={() => setShowRouteEditor(true)}
+                                className="text-[9px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-400 transition-colors flex items-center gap-2"
+                              >
+                                ✏️ Editar Rutas
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1532,6 +1780,175 @@ const RoutePlanner: React.FC = () => {
                     <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-lg shadow-purple-500/20"></div>
                     <span className={`text-[10px] font-black uppercase ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>GDL</span>
                   </div>
+                </div>
+
+                {/* Timeline de Rutas - Rendimiento Nacional (Idéntico al Command Center) */}
+                <div className="mt-12 pt-12 border-t border-white/5">
+                  {/* Header con BASE_CDMX */}
+                  <div className="flex justify-center mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></div>
+                      <span className="text-blue-500 text-xs font-black uppercase tracking-[0.3em]">BASE_CDMX</span>
+                    </div>
+                  </div>
+
+                  {/* Calcular fechas dinámicamente */}
+                  {(() => {
+                    // Obtener todas las fechas del proyecto
+                    const allDates = optimizedRoutes.flatMap(r =>
+                      r.scheduledDays?.map((d: any) => d.date) ||
+                      r.stops.filter((s: any) => s.scheduled_date).map((s: any) => s.scheduled_date) || []
+                    ).filter(Boolean);
+
+                    // Si no hay fechas, usar las del config
+                    let projectDates: string[] = [];
+                    if (allDates.length > 0) {
+                      const sorted = [...new Set(allDates)].sort() as string[];
+                      projectDates = sorted;
+                    } else {
+                      // Generar fechas desde config
+                      const start = new Date(config.startDate + 'T00:00:00');
+                      const end = new Date(config.endDate + 'T00:00:00');
+                      const dates: string[] = [];
+                      const current = new Date(start);
+                      while (current <= end) {
+                        if (config.workDays.includes(current.getDay())) {
+                          dates.push(current.toISOString().split('T')[0]);
+                        }
+                        current.setDate(current.getDate() + 1);
+                      }
+                      projectDates = dates;
+                    }
+
+                    const startDate = projectDates.length > 0 ? new Date(projectDates[0] + 'T00:00:00') : new Date();
+                    const endDate = projectDates.length > 0 ? new Date(projectDates[projectDates.length - 1] + 'T00:00:00') : new Date();
+                    const totalDays = projectDates.length;
+
+                    // Limitar a 15 fechas visibles para no saturar
+                    const visibleDates = projectDates.slice(0, Math.min(15, projectDates.length));
+
+                    const formatDate = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                    const formatDateShort = (dateStr: string) => {
+                      const d = new Date(dateStr + 'T00:00:00');
+                      return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+                    };
+
+                    // Colores vibrantes por ruta
+                    const routeColors = [
+                      'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                      'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                      'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                      'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                      'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+                      'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                      'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+                      'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+                    ];
+
+                    return (
+                      <>
+                        {/* Título con Fechas Dinámicas */}
+                        <div className="flex items-center justify-between mb-6">
+                          <div>
+                            <h5 className={`text-base font-black uppercase tracking-tight italic ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Timeline de Ejecución</h5>
+                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
+                              Cronograma {formatDate(startDate)} - {formatDate(endDate)} ({totalDays} días hábiles)
+                            </p>
+                          </div>
+                          <div className="flex gap-6">
+                            <span className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase">
+                              <div className="w-8 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"></div>
+                              OPERACIÓN
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Eje de RUTAS (X) y FECHAS (Y) - Matriz de Despliegue Vertical */}
+                        <div className="border border-white/5 rounded-[2rem] overflow-hidden bg-black/20 backdrop-blur-3xl">
+                          <div className="overflow-x-auto custom-scrollbar">
+                            <div className="min-w-[800px]">
+                              {/* Header: Rutas (Sticky Top) */}
+                              <div className="flex bg-white/5 border-b border-white/10 p-4 sticky top-0 z-10 backdrop-blur-md">
+                                <div className="w-32 shrink-0 flex items-center">
+                                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">CALENDARIO</span>
+                                </div>
+                                <div className="flex-1 flex gap-2">
+                                  {optimizedRoutes.map((route, rIdx) => (
+                                    <div key={route.id} className="flex-1 min-w-[60px] flex flex-col items-center gap-1 group">
+                                      <div className="w-2 h-2 rounded-full mb-1" style={{ backgroundColor: route.color }}></div>
+                                      <span className="text-[9px] font-black text-white/70 group-hover:text-white transition-colors">R-{String(route.id).padStart(2, '0')}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Body: Fechas con Scroll Vertical */}
+                              <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                                {projectDates.map((dateStr, dIdx) => {
+                                  const d = new Date(dateStr + 'T00:00:00');
+                                  const dayName = d.toLocaleDateString('es-MX', { weekday: 'short' });
+                                  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+                                  return (
+                                    <div key={dateStr} className={`flex items-center p-4 border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors ${isWeekend ? 'bg-orange-500/[0.02]' : ''}`}>
+                                      <div className="w-32 shrink-0">
+                                        <p className={`text-[10px] font-black uppercase tracking-tight ${isWeekend ? 'text-orange-500' : 'text-slate-400'}`}>
+                                          {dayName} <span className="text-slate-600 font-bold ml-1">•</span> {formatDateShort(dateStr)}
+                                        </p>
+                                      </div>
+                                      <div className="flex-1 flex gap-2 h-8 items-center">
+                                        {optimizedRoutes.map((route, rIdx) => {
+                                          const isWorking = route.scheduledDays?.some((sd: any) => sd.date === dateStr);
+                                          // Fallback si no hay scheduledDays (fase previa)
+                                          const totalStops = route.stops.length;
+                                          const routeDays = Math.ceil(totalStops / config.stopsPerDayPerRoute);
+                                          const routeStartIdx = projectDates.indexOf(route.startDate || config.startDate);
+                                          const isEstimatedWorking = !route.scheduledDays && (dIdx >= routeStartIdx && dIdx < routeStartIdx + routeDays);
+
+                                          return (
+                                            <div key={route.id} className="flex-1 min-w-[60px] h-full flex items-center justify-center">
+                                              {(isWorking || isEstimatedWorking) && (
+                                                <div
+                                                  className="w-full h-5 rounded-md shadow-lg transform transition-transform hover:scale-110 flex items-center justify-center group/pill relative"
+                                                  style={{ background: routeColors[rIdx % routeColors.length] }}
+                                                >
+                                                  <div className="absolute inset-0 bg-gradient-to-tr from-black/20 to-transparent rounded-md"></div>
+                                                  <span className="text-[7px] font-black text-white opacity-0 group-hover/pill:opacity-100 transition-opacity">ACTIVA</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              {/* Footer Stats Matrix */}
+                              <div className="p-6 bg-white/[0.03] flex items-center justify-between">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                  MODO: MATRIZ DE DESPLIEGUE EJECUTIVO
+                                </p>
+                                <div className="flex gap-4">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                    <span className="text-[9px] font-black text-slate-400">FASE OPERATIVA</span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-slate-700"></div>
+                                    <span className="text-[9px] font-black text-slate-400">DISPONIBLE</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -1566,10 +1983,22 @@ const RoutePlanner: React.FC = () => {
                     {/* Header Ejecutivo */}
                     <div className="flex items-center justify-between px-4">
                       <div>
-                        <h2 className={`text-5xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Mission Control</h2>
-                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mt-2 italic">Dashboard Directivo: Visibilidad Total en Tiempo Real</p>
+                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em] mb-2 italic animate-pulse">PROJECT: {projectName}</p>
+                        <h2 className={`text-4xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{projectName || 'Sin Nombre'}</h2>
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-2">Mission Control • Dashboard Directivo</p>
                       </div>
                       <div className="flex items-center gap-6">
+                        {/* Edit Routes Button */}
+                        <button
+                          onClick={() => setShowRouteEditor(true)}
+                          className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isLightMode
+                            ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                            : 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20'
+                            }`}
+                        >
+                          <span>✏️</span>
+                          Editar Rutas
+                        </button>
                         <div className="text-right">
                           <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Sincronización</p>
                           <p className={`text-xs font-black uppercase italic ${isLightMode ? 'text-slate-900' : 'text-blue-400'}`}>ACTIVA — AI ENGINE 2.5</p>
@@ -1647,6 +2076,9 @@ const RoutePlanner: React.FC = () => {
                             <div className="grid grid-cols-2 gap-6">
                               {evidences.slice(0, 4).map((ev, idx) => (
                                 <div key={ev.id} className="relative aspect-video rounded-3xl overflow-hidden border border-white/10 group cursor-pointer shadow-2xl">
+                                  <div className="absolute top-4 left-4 z-20 bg-black/60 backdrop-blur-md px-3 py-1 rounded-lg text-[8px] font-black text-white uppercase tracking-widest">
+                                    {idx + 1}
+                                  </div>
                                   <img src={ev.file_url} className="absolute inset-0 w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" alt="Evidencia" />
                                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
                                     <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">{ev.uploaded_by}</p>
@@ -1960,143 +2392,20 @@ const RoutePlanner: React.FC = () => {
                 )}
 
                 {activeTab === 'CALENDAR' && (
-                  <div className="space-y-12 animate-in fade-in slide-in-from-bottom-8 duration-1000 pb-20">
-                    {/* Header Ejecutivo del Cronograma */}
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-10">
-                      <div className="flex items-center gap-8">
-                        <div className="flex flex-col gap-2">
-                          <img src="./images/iamanos.png" alt="iamanos" className="h-10 w-auto" />
-                          <div className="flex items-center gap-3">
-                            <img src="./images/logo.png" alt="Target" className="h-8 w-auto" />
-                            <span className="text-blue-500 text-[8px] font-black bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 uppercase tracking-[0.2em]">OptiFlot™ 2.5</span>
-                          </div>
-                        </div>
-                        <div className="h-16 w-px bg-white/10 hidden md:block"></div>
-                        <div>
-                          <h2 className={`text-6xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                            Cronograma <span className="text-blue-500">Master</span>
-                          </h2>
-                          <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em] mt-2 italic">
-                            Visualización de Ejecución Logística — Misión AntiGravity
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex gap-6">
-                        <div className={`${isLightMode ? 'bg-white border-slate-200 shadow-xl' : 'bg-white/[0.02] border-white/5'} p-8 rounded-[2.5rem] border text-center min-w-[160px]`}>
-                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Total Días</p>
-                          <p className={`text-4xl font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                            {Array.from(new Set(optimizedRoutes.flatMap(r => r.stops.map((s: any) => s.scheduled_date)))).filter(Boolean).length}
-                          </p>
-                        </div>
-                        <div className={`${isLightMode ? 'bg-white border-slate-200 shadow-xl' : 'bg-white/[0.02] border-white/5'} p-8 rounded-[2.5rem] border text-center min-w-[160px]`}>
-                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Total Rutas</p>
-                          <p className={`text-4xl font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{optimizedRoutes.length}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (optimizedRoutes.length === 0) {
-                              alert("⚠️ MISION CONTROL: Optimiza las rutas primero para generar la cotización.");
-                              return;
-                            }
-                            setShowQuotation(true);
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-5 rounded-[2.5rem] font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl shadow-emerald-500/20 flex items-center gap-4 transition-all hover:scale-105 active:scale-95 ml-4"
-                        >
-                          <span className="text-xl">💰</span>
-                          Cotizar Operación
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Listado Maestro por Rutas */}
-                    <div className="grid grid-cols-1 gap-12">
-                      {optimizedRoutes.sort((a, b) => a.id.localeCompare(b.id)).map((route, idx) => {
-                        const routeDays = Object.entries(
-                          route.stops.reduce((acc: any, stop: any) => {
-                            const date = stop.scheduled_date || 'Sin Fecha';
-                            if (!acc[date]) acc[date] = [];
-                            acc[date].push(stop);
-                            return acc;
-                          }, {})
-                        ).sort(([a], [b]) => a.localeCompare(b));
-
-                        return (
-                          <div key={route.id} className={`${isLightMode ? 'bg-white border-slate-200 shadow-2xl' : 'bg-slate-900/60 border-white/5 shadow-[0_32px_128px_-32px_rgba(0,0,0,0.5)]'} rounded-[4rem] border overflow-hidden transition-all hover:border-blue-500/30 group`}>
-                            {/* Header de la Ruta - Estilo Ejecutivo */}
-                            <div className={`p-10 border-b ${isLightMode ? 'bg-slate-50 border-slate-100' : 'bg-white/5 border-white/5'} flex flex-col lg:flex-row items-center justify-between gap-8`}>
-                              <div className="flex items-center gap-8">
-                                <div className="w-24 h-24 rounded-[2.5rem] flex flex-col items-center justify-center font-black text-white shadow-2xl transform group-hover:rotate-6 transition-transform" style={{ backgroundColor: route.color }}>
-                                  <span className="text-[10px] uppercase opacity-70">Ruta</span>
-                                  <span className="text-4xl italic">{route.id}</span>
-                                </div>
-                                <div>
-                                  <div className="flex items-center gap-3">
-                                    <h3 className={`text-4xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{route.driverName}</h3>
-                                    <img src="./images/logo.png" alt="Target" className="h-8 w-auto opacity-50 group-hover:opacity-100 transition-opacity" />
-                                  </div>
-                                  <div className="flex items-center gap-4 mt-2">
-                                    <span className="px-3 py-1 bg-blue-500/10 text-blue-500 rounded-lg text-[9px] font-black uppercase tracking-widest border border-blue-500/20">{route.base}</span>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>{route.stops.length} Tiendas en el Despliegue</span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex gap-12">
-                                <div className="text-right">
-                                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Distancia del Ciclo</p>
-                                  <p className={`text-2xl font-black italic ${isLightMode ? 'text-slate-900' : 'text-blue-400'}`}>
-                                    {Math.round(route.totalKm).toLocaleString()} <span className="text-xs">km</span>
-                                  </p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">Costo Estimado Op.</p>
-                                  <p className={`text-2xl font-black italic ${isLightMode ? 'text-slate-900' : 'text-emerald-400'}`}>
-                                    ${(Math.round(route.totalKm * 3.5)).toLocaleString()} <span className="text-xs uppercase">mxn</span>
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Timeline de la Ruta */}
-                            <div className="p-10 overflow-x-auto custom-scrollbar">
-                              <div className="flex gap-8 min-w-max pb-4">
-                                {routeDays.map(([date, stops]: [string, any]) => (
-                                  <div key={date} className={`${isLightMode ? 'bg-slate-50 border-slate-100 hover:bg-white' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.05]'} w-[300px] p-8 rounded-[3rem] border transition-all hover:scale-105 shadow-xl`}>
-                                    <div className="flex items-center justify-between mb-8">
-                                      <div className="px-5 py-2.5 rounded-2xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/30">
-                                        {date !== 'Sin Fecha' ? (() => {
-                                          const [y, m, d] = date.split('-').map(Number);
-                                          return new Date(y, m - 1, d).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' });
-                                        })() : 'Fecha Especial'}
-                                      </div>
-                                      <span className={`text-[10px] font-black ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`}>DÍA {stops[0].day_in_project || 'X'}</span>
-                                    </div>
-
-                                    <div className="space-y-6">
-                                      {stops.sort((a: any, b: any) => a.stop_in_day - b.stop_in_day).map((s: any) => (
-                                        <div key={s.store_job_id} className="group/stop cursor-pointer">
-                                          <div className="flex items-start gap-4">
-                                            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-lg border border-white/10" style={{ backgroundColor: `${route.color}20`, color: route.color }}>
-                                              <span className="text-[10px] font-black">{s.stop_in_day}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                              <p className={`text-xs font-black uppercase italic tracking-tight group-hover/stop:text-blue-500 transition-colors ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                                                {s.name_sitio}
-                                              </p>
-                                              <p className="text-[8px] font-bold text-slate-500 uppercase tracking-widest">{s.city}</p>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  <div className="space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-1000 pb-20">
+                    <MasterScheduleGantt
+                      routes={optimizedRoutes}
+                      isLightMode={isLightMode}
+                      onViewRoute={(r) => {
+                        setDetailViewRoute(r.id);
+                        setActiveTab('LIST');
+                      }}
+                      onViewDay={(route, day) => {
+                        console.log('Ver día:', route.id, day);
+                        setDetailViewRoute(route.id);
+                        setActiveTab('LIST');
+                      }}
+                    />
                   </div>
                 )}
 
@@ -2129,6 +2438,12 @@ const RoutePlanner: React.FC = () => {
                               >
                                 Terminal Móvil
                               </button>
+                              <button
+                                onClick={() => setEvidenceViewMode('CALENDAR')}
+                                className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${evidenceViewMode === 'CALENDAR' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-400'}`}
+                              >
+                                Calendario
+                              </button>
                             </div>
                           </div>
                           <button
@@ -2140,7 +2455,15 @@ const RoutePlanner: React.FC = () => {
                           </button>
                         </div>
 
-                        {evidenceViewMode === 'MOBILE' ? (
+                        {evidenceViewMode === 'CALENDAR' ? (
+                          <div className="animate-in fade-in duration-1000">
+                            <VisualCalendar
+                              routes={optimizedRoutes}
+                              isLightMode={isLightMode}
+                              onViewRoute={(r) => setActiveRouteForEvidence(r)}
+                            />
+                          </div>
+                        ) : evidenceViewMode === 'MOBILE' ? (
                           <div className="flex flex-col items-center py-20 animate-in zoom-in-95 duration-1000">
                             <div className="relative">
                               {/* Decoración de dispositivo */}
@@ -2222,6 +2545,7 @@ const RoutePlanner: React.FC = () => {
                               <table className="w-full">
                                 <thead>
                                   <tr className={`text-[10px] font-black uppercase tracking-widest ${isLightMode ? 'text-slate-400 border-slate-100' : 'text-slate-500 border-white/5'} border-b`}>
+                                    <th className="text-left py-4 px-4 w-12">#</th>
                                     <th className="text-left py-4 px-4">Site ID</th>
                                     <th className="text-left py-4 px-4">Tienda</th>
                                     <th className="text-left py-4 px-4">Operación</th>
@@ -2242,7 +2566,8 @@ const RoutePlanner: React.FC = () => {
 
                                     return (
                                       <tr key={i} className={`text-sm ${isLightMode ? 'hover:bg-slate-50' : 'hover:bg-white/[0.02]'} transition-colors group`}>
-                                        <td className="py-6 px-4 font-mono font-black text-blue-500">{site.site_id}</td>
+                                        <td className="py-6 px-4 font-mono font-black text-blue-500">{i + 1}</td>
+                                        <td className="py-6 px-4 font-mono font-black text-slate-500">{site.site_id}</td>
                                         <td className="py-6 px-4">
                                           <p className={`font-black uppercase italic ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{site.name_sitio}</p>
                                           <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{site.city}, {site.state}</p>
@@ -2290,8 +2615,7 @@ const RoutePlanner: React.FC = () => {
                               </table>
                             </div>
                           </div>
-                        )}
-                      </>
+                        )} </>
                     ) : (
                       <div className="space-y-10">
                         <div className="flex items-center justify-between">
@@ -2554,81 +2878,81 @@ const RoutePlanner: React.FC = () => {
         />
       </div>
       {/* Modal de Carga de Evidencias / Acuses (AntiGravity Audit) */}
-      {evidenceModalOpen && currentStoreForEvidence && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-3xl bg-slate-950/60 transition-all duration-500 animate-in fade-in">
-          <div className={`${isLightMode ? 'bg-white' : 'bg-slate-900'} w-full max-w-2xl rounded-[4rem] border ${isLightMode ? 'border-slate-200 shadow-2xl' : 'border-white/10 shadow-[0_0_100px_rgba(37,99,235,0.2)]'} overflow-hidden`}>
-            {/* Header Modal */}
-            <div className={`p-12 border-b ${isLightMode ? 'bg-slate-50 border-slate-100' : 'bg-white/5 border-white/5'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${evidenceType === 'PHOTO' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                  {evidenceType === 'PHOTO' ? '📸 Módulo Evidencia' : '📄 Módulo Acuse'}
-                </span>
-                <button onClick={() => setEvidenceModalOpen(false)} className="text-slate-500 hover:text-white transition-all">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                </button>
-              </div>
-              <h3 className={`text-4xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                {currentStoreForEvidence.name_sitio}
-              </h3>
-              <p className={`text-xs font-bold uppercase tracking-widest mt-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                Ruta {currentStoreForEvidence.routeId} • Stop {currentStoreForEvidence.stop_in_day} • {currentStoreForEvidence.scheduled_date}
-              </p>
-            </div>
-
-            <div className="p-12 space-y-10">
-              <div className="space-y-4">
-                <label className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {evidenceType === 'PHOTO' ? 'Categoría de Evidencia' : 'Tipo de Documento'}
-                </label>
-                <div className="grid grid-cols-2 gap-4">
-                  {evidenceType === 'PHOTO' ? (
-                    ['EVIDENCIA_INSTALACION', 'EVIDENCIA_MANTENIMIENTO', 'EVIDENCIA_ENTREGA'].map(cat => (
-                      <button
-                        key={cat}
-                        className={`px-6 py-4 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${isLightMode ? 'border-slate-200 hover:bg-slate-50 text-slate-600' : 'border-white/5 bg-white/5 hover:bg-white/10 text-slate-400'}`}
-                      >
-                        {cat.replace('_', ' ')}
-                      </button>
-                    ))
-                  ) : (
-                    <button className="px-6 py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-widest col-span-2">
-                      ACUSE DE RECIBIDO (FIRMADO)
-                    </button>
-                  )}
+      {
+        evidenceModalOpen && currentStoreForEvidence && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-3xl bg-slate-950/60 transition-all duration-500 animate-in fade-in">
+            <div className={`${isLightMode ? 'bg-white' : 'bg-slate-900'} w-full max-w-2xl rounded-[4rem] border ${isLightMode ? 'border-slate-200 shadow-2xl' : 'border-white/10 shadow-[0_0_100px_rgba(37,99,235,0.2)]'} overflow-hidden`}>
+              {/* Header Modal */}
+              <div className={`p-12 border-b ${isLightMode ? 'bg-slate-50 border-slate-100' : 'bg-white/5 border-white/5'}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${evidenceType === 'PHOTO' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'}`}>
+                    {evidenceType === 'PHOTO' ? '📸 Módulo Evidencia' : '📄 Módulo Acuse'}
+                  </span>
+                  <button onClick={() => setEvidenceModalOpen(false)} className="text-slate-500 hover:text-white transition-all">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                  </button>
                 </div>
+                <h3 className={`text-4xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                  {currentStoreForEvidence.name_sitio}
+                </h3>
+                <p className={`text-xs font-bold uppercase tracking-widest mt-2 ${isLightMode ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Ruta {currentStoreForEvidence.routeId} • Stop {currentStoreForEvidence.stop_in_day} • {currentStoreForEvidence.scheduled_date}
+                </p>
               </div>
 
-              <div className="space-y-4">
-                <label className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Notas de Campo</label>
-                <textarea
-                  id="evidence-notes"
-                  placeholder="Escribe detalles sobre la instalación o novedades..."
-                  className={`w-full h-32 rounded-3xl p-6 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all ${isLightMode ? 'bg-slate-50 border border-slate-200 text-slate-900' : 'bg-white/5 border border-white/10 text-white'}`}
-                />
-              </div>
+              <div className="p-12 space-y-10">
+                <div className="space-y-4">
+                  <label className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {evidenceType === 'PHOTO' ? 'Categoría de Evidencia' : 'Tipo de Documento'}
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    {evidenceType === 'PHOTO' ? (
+                      ['EVIDENCIA_INSTALACION', 'EVIDENCIA_MANTENIMIENTO', 'EVIDENCIA_ENTREGA'].map(cat => (
+                        <button
+                          key={cat}
+                          className={`px-6 py-4 rounded-xl border text-[9px] font-black uppercase tracking-widest transition-all ${isLightMode ? 'border-slate-200 hover:bg-slate-50 text-slate-600' : 'border-white/5 bg-white/5 hover:bg-white/10 text-slate-400'}`}
+                        >
+                          {cat.replace('_', ' ')}
+                        </button>
+                      ))
+                    ) : (
+                      <button className="px-6 py-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-[9px] font-black uppercase tracking-widest col-span-2">
+                        ACUSE DE RECIBIDO (FIRMADO)
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-              <div className="flex items-center gap-6">
-                <button
-                  onClick={() => {
-                    const notes = (document.getElementById('evidence-notes') as HTMLTextAreaElement)?.value || '';
-                    handleUploadEvidence(notes, null);
-                  }}
-                  className={`flex-1 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] transition-all shadow-xl ${evidenceType === 'PHOTO' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
-                >
-                  Confirmar y Subir
-                </button>
-                <button
-                  onClick={() => setEvidenceModalOpen(false)}
-                  className={`flex-1 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] transition-all border ${isLightMode ? 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50' : 'bg-slate-950 border-white/5 text-slate-500 hover:border-white/10'}`}
-                >
-                  Cancelar
-                </button>
+                <div className="space-y-4">
+                  <label className={`text-[10px] font-black uppercase tracking-[0.3em] ml-2 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Notas de Campo</label>
+                  <textarea
+                    id="evidence-notes"
+                    placeholder="Escribe detalles sobre la instalación o novedades..."
+                    className={`w-full h-32 rounded-3xl p-6 text-sm font-medium focus:ring-2 focus:ring-blue-500 outline-none transition-all ${isLightMode ? 'bg-slate-50 border border-slate-200 text-slate-900' : 'bg-white/5 border border-white/10 text-white'}`}
+                  />
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <button
+                    onClick={() => {
+                      const notes = (document.getElementById('evidence-notes') as HTMLTextAreaElement)?.value || '';
+                      handleUploadEvidence(notes, null);
+                    }}
+                    className={`flex-1 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] transition-all shadow-xl ${evidenceType === 'PHOTO' ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+                  >
+                    Confirmar y Subir
+                  </button>
+                  <button
+                    onClick={() => setEvidenceModalOpen(false)}
+                    className={`flex-1 py-6 rounded-3xl font-black text-xs uppercase tracking-[0.3em] transition-all border ${isLightMode ? 'bg-white border-slate-200 text-slate-900 hover:bg-slate-50' : 'bg-slate-950 border-white/5 text-slate-500 hover:border-white/10'}`}
+                  >
+                    Cancelar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
+        )}
       {/* Cotización Master iamanos (Quotation Overlay) */}
       {showQuotation && quotationData && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-8 md:p-20 transition-all animate-in fade-in duration-500">
@@ -2658,9 +2982,10 @@ const RoutePlanner: React.FC = () => {
                     </div>
                     <span className="text-[10px] font-black text-emerald-500 uppercase tracking-[0.4em]">Propuesta de Inversión OptiFlot™</span>
                   </div>
-                  <h2 className={`text-5xl md:text-6xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                    Cotización <span className="text-emerald-500">Master</span>
+                  <h2 className={`text-4xl md:text-5xl font-black uppercase italic tracking-tighter leading-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
+                    <span className="text-emerald-500">{projectName || 'Proyecto'}</span>
                   </h2>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mt-2">Cotización Master</p>
                 </div>
               </div>
               <button
@@ -2684,7 +3009,7 @@ const RoutePlanner: React.FC = () => {
                         <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20 font-black italic">KM</div>
                         <div>
                           <p className={`text-sm font-black italic uppercase ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Kilometraje de Operación</p>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Incluye margen de seguridad +15%</p>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total km calculados por ruta</p>
                         </div>
                       </div>
                       <p className={`text-2xl font-black italic ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
@@ -2739,91 +3064,105 @@ const RoutePlanner: React.FC = () => {
                   </div>
                 </div>
               </div>
+            </div>
+            {/* Tarjeta de Valor Final */}
+            <div className={`${isLightMode ? 'bg-slate-900 text-white shadow-3xl' : 'bg-blue-600 text-white shadow-[0_80px_160px_-40px_rgba(37,99,235,0.4)]'} p-16 md:p-24 rounded-[5rem] flex flex-col justify-between transform lg:rotate-1 relative overflow-hidden group col-span-1 lg:col-span-2 mt-10`}>
+              <div className="absolute top-0 right-0 w-[60rem] h-[60rem] bg-white/10 blur-[150px] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none opacity-50"></div>
+              <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-black/20 blur-[100px] rounded-full translate-y-1/3 -translate-x-1/3 pointer-events-none"></div>
 
-              {/* Tarjeta de Valor Final */}
-              <div className={`${isLightMode ? 'bg-slate-900 text-white shadow-3xl' : 'bg-blue-600 text-white shadow-[0_80px_160px_-40px_rgba(37,99,235,0.4)]'} p-16 md:p-24 rounded-[5rem] flex flex-col justify-between transform lg:rotate-1 relative overflow-hidden group col-span-1 lg:col-span-2 mt-10`}>
-                <div className="absolute top-0 right-0 w-[60rem] h-[60rem] bg-white/10 blur-[150px] rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none opacity-50"></div>
-                <div className="absolute bottom-0 left-0 w-[40rem] h-[40rem] bg-black/20 blur-[100px] rounded-full translate-y-1/3 -translate-x-1/3 pointer-events-none"></div>
-
-                <div className="relative space-y-20">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[12px] font-black uppercase tracking-[0.5em] text-blue-100/60 mb-2">Presupuesto Ejecutado</p>
-                      <h4 className="text-6xl md:text-7xl font-black uppercase italic tracking-tighter">Inversión Logística</h4>
-                    </div>
-                    <div className="hidden md:block text-right">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100/60 mb-2">Estatus Fiscal</p>
-                      <p className="text-xs font-black uppercase italic tracking-widest bg-white/10 px-4 py-2 rounded-xl border border-white/10">Válido por 15 días</p>
-                    </div>
+              <div className="relative space-y-20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[12px] font-black uppercase tracking-[0.5em] text-blue-100/60 mb-2">Presupuesto Ejecutado</p>
+                    <h4 className="text-6xl md:text-7xl font-black uppercase italic tracking-tighter">Inversión Logística</h4>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
-                    <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Viáticos & Operatividad</p>
-                      <div className="flex items-baseline gap-3">
-                        <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.totalViaticos).toLocaleString()}</p>
-                        <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
-                      </div>
-                      <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Suma de todas las paradas programadas por zona de despliegue</p>
-                    </div>
-
-                    <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Movilidad & Combustible</p>
-                      <div className="flex items-baseline gap-3">
-                        <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.fuelCost).toLocaleString()}</p>
-                        <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
-                      </div>
-                      <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Cálculo basado en {Math.round(quotationData.quotedKm).toLocaleString()} km proyectados</p>
-                    </div>
-                  </div>
-
-                  <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-10">
-                    <div>
-                      <p className="text-[14px] font-black uppercase tracking-[0.5em] text-blue-100 mb-2 opacity-80">Total del Proyecto</p>
-                      <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">IVA INCLUIDO (PROYECCIÓN FINAL)</p>
-                    </div>
-                    <div className="flex items-start gap-4">
-                      <span className="text-4xl mt-6 font-black opacity-40">$</span>
-                      <p className="text-[80px] md:text-[120px] leading-[0.85] font-black italic tracking-tighter drop-shadow-2xl">
-                        {Math.round(quotationData.totalProjectValue).toLocaleString()}
-                      </p>
-                    </div>
+                  <div className="hidden md:block text-right">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-100/60 mb-2">Estatus Fiscal</p>
+                    <p className="text-xs font-black uppercase italic tracking-widest bg-white/10 px-4 py-2 rounded-xl border border-white/10">Válido por 15 días</p>
                   </div>
                 </div>
 
-                <div className="mt-20 flex flex-col md:flex-row items-center justify-between gap-10">
-                  <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 rounded-[1.5rem] bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
-                      <span className="text-2xl">📜</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
+                  <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Viáticos & Operatividad</p>
+                    <div className="flex items-baseline gap-3">
+                      <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.totalViaticos).toLocaleString()}</p>
+                      <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-widest max-w-xs leading-relaxed opacity-60">
-                      Esta cotización incluye todos los gastos de traslado, alimentación y pernocta para el despliegue nacional a cargo de iamanos (2 instaladores por unidad).
+                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Suma de todas las paradas programadas por zona de despliegue</p>
+                  </div>
+
+                  <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-200/60">Movilidad & Combustible</p>
+                    <div className="flex items-baseline gap-3">
+                      <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.fuelCost).toLocaleString()}</p>
+                      <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
+                    </div>
+                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Cálculo basado en {Math.round(quotationData.quotedKm).toLocaleString()} km proyectados</p>
+                  </div>
+                </div>
+
+                <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-10">
+                  <div>
+                    <p className="text-[14px] font-black uppercase tracking-[0.5em] text-blue-100 mb-2 opacity-80">Total del Proyecto</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">IVA INCLUIDO (PROYECCIÓN FINAL)</p>
+                  </div>
+                  <div className="flex items-start gap-4">
+                    <span className="text-4xl mt-6 font-black opacity-40">$</span>
+                    <p className="text-[80px] md:text-[120px] leading-[0.85] font-black italic tracking-tighter drop-shadow-2xl">
+                      {Math.round(quotationData.totalProjectValue).toLocaleString()}
                     </p>
                   </div>
-                  <div className="flex gap-4">
-                    <button
-                      onClick={handleExportQuotationPDF}
-                      className="bg-emerald-600 text-white px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:bg-emerald-500 transition-all flex items-center gap-4 active:scale-95"
-                    >
-                      {isExporting ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      ) : (
-                        <span>📥</span>
-                      )}
-                      Descargar PDF
-                    </button>
-                    <button className="bg-white text-blue-600 px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 active:scale-95">
-                      <span>📑</span> Aprobar Inversión
-                    </button>
+                </div>
+              </div>
+
+              <div className="mt-20 flex flex-col md:flex-row items-center justify-between gap-10">
+                <div className="flex items-center gap-6">
+                  <div className="w-16 h-16 rounded-[1.5rem] bg-white/10 flex items-center justify-center backdrop-blur-md border border-white/20">
+                    <span className="text-2xl">📜</span>
                   </div>
+                  <p className="text-[10px] font-black uppercase tracking-widest max-w-xs leading-relaxed opacity-60">
+                    Esta cotización incluye todos los gastos de traslado, alimentación y pernocta para el despliegue nacional a cargo de iamanos (2 instaladores por unidad).
+                  </p>
+                </div>
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleExportQuotationPDF}
+                    className="bg-emerald-600 text-white px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:bg-emerald-500 transition-all flex items-center gap-4 active:scale-95"
+                  >
+                    {isExporting ? (
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    ) : (
+                      <span>📥</span>
+                    )}
+                    Descargar PDF
+                  </button>
+                  <button className="bg-white text-blue-600 px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 active:scale-95">
+                    <span>📑</span> Aprobar Inversión
+                  </button>
                 </div>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Route Editor Modal */}
+      {showRouteEditor && optimizedRoutes.length > 0 && (
+        <RouteEditor
+          routes={optimizedRoutes}
+          isLightMode={isLightMode}
+          onRoutesUpdate={(updatedRoutes) => {
+            setOptimizedRoutes(updatedRoutes);
+            setUnsavedChanges(true);
+            saveProject(sites, updatedRoutes, evidences, config);
+          }}
+          onClose={() => setShowRouteEditor(false)}
+        />
+      )}
     </div>
   );
 };
+
 
 export default RoutePlanner;

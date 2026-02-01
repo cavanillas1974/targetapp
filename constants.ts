@@ -12,12 +12,22 @@ export const COLORS = {
 };
 
 export const BASES = [
-  { name: 'CDMX', lat: 19.4326, lng: -99.1332 },
+  { name: 'CDMX', lat: 19.4326, lng: -99.1332, isDefault: true },
   { name: 'Monterrey', lat: 25.6866, lng: -100.3161 },
   { name: 'Guadalajara', lat: 20.6597, lng: -103.3496 },
   { name: 'Tijuana', lat: 32.5149, lng: -117.0382 },
   { name: 'León', lat: 21.1222, lng: -101.6606 },
-  { name: 'Sinaloa (Culiacán)', lat: 24.8091, lng: -107.3940 }
+  { name: 'Sinaloa (Culiacán)', lat: 24.8091, lng: -107.3940 },
+  { name: 'Mérida', lat: 20.9674, lng: -89.5926 },
+  { name: 'Cancún', lat: 21.1619, lng: -86.8515 },
+  { name: 'Veracruz', lat: 19.1738, lng: -96.1342 },
+  { name: 'Puebla', lat: 19.0414, lng: -98.2063 },
+  { name: 'Querétaro', lat: 20.5888, lng: -100.3899 },
+  { name: 'San Luis Potosí', lat: 22.1565, lng: -100.9855 },
+  { name: 'Chihuahua', lat: 28.6353, lng: -106.0889 },
+  { name: 'Hermosillo', lat: 29.0729, lng: -110.9559 },
+  { name: 'Oaxaca', lat: 17.0732, lng: -96.7266 },
+  { name: 'Villahermosa', lat: 17.9890, lng: -92.9475 }
 ];
 
 export const MOCK_SITES: any[] = [

@@ -181,3 +181,50 @@ export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
 }
+
+// ============ TIPOS PARA MOTOR DE CORREDORES ============
+
+export interface RouteHub {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  city: string;
+  isDefault?: boolean;
+}
+
+export interface OvernightLocation {
+  name: string;
+  lat: number;
+  lng: number;
+  nearestCity: string;
+  distanceToNextStore: number;
+  reason: string;
+}
+
+export interface ScheduledDayInfo {
+  dayNumber: number;
+  date: string;
+  storeCount: number;
+  kmTotal: number;
+  minutesTotal: number;
+  overnightLocation?: OvernightLocation;
+  startCity: string;
+  endCity: string;
+}
+
+export interface CorridorInfo {
+  id: string;
+  name: string;
+  direction: string;
+  region: string;
+  storeCount: number;
+}
+
+export interface ExtendedRoute extends Route {
+  corridorId?: string;
+  corridorName?: string;
+  direction?: string;
+  hub?: RouteHub;
+  scheduledDays?: ScheduledDayInfo[];
+}

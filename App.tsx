@@ -10,7 +10,19 @@ import { COLORS } from './constants';
 
 const AppContent: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [activeProjectName, setActiveProjectName] = useState<string | null>(localStorage.getItem('iamanos_active_project_name'));
   const location = useLocation();
+
+  useEffect(() => {
+    // Sincronizar nombre del proyecto en tiempo real
+    const interval = setInterval(() => {
+      const currentName = localStorage.getItem('iamanos_active_project_name');
+      if (currentName !== activeProjectName) {
+        setActiveProjectName(currentName);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeProjectName]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#030712] text-slate-100 font-['Inter'] selection:bg-blue-600/30 selection:text-white">
@@ -26,12 +38,20 @@ const AppContent: React.FC = () => {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
             </button>
             <div>
-              <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em] mb-1">Centro de Comando</p>
+              <div className="flex items-center gap-3 mb-1">
+                <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.4em]">Centro de Comando</p>
+                {activeProjectName && (
+                  <>
+                    <span className="text-slate-600 text-[10px]">•</span>
+                    <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest italic animate-pulse">PROJECT: {activeProjectName}</p>
+                  </>
+                )}
+              </div>
               <h1 className="text-2xl font-black tracking-tighter text-white">
-                {location.pathname === '/' && 'DASHBOARD'}
-                {location.pathname === '/planner' && 'CRONOGRAMA'}
-                {location.pathname === '/evidence' && 'EVIDENCIAS CHÓFERES'}
-                {location.pathname === '/chat' && 'CONSULTA LO QUE NECESITES'}
+                {location.pathname === '/' && 'DASHBOARD EXECUTIVE'}
+                {location.pathname === '/planner' && 'CRONOGRAMA DE EJECUCIÓN'}
+                {location.pathname === '/evidence' && 'AUDITORÍA DE EVIDENCIAS'}
+                {location.pathname === '/chat' && 'ASISTENTE DE INTELIGENCIA'}
               </h1>
             </div>
           </div>
