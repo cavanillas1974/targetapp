@@ -3268,7 +3268,7 @@ const RoutePlanner: React.FC = () => {
               {/* Header Formal */}
               <div className="flex items-center justify-between border-b-4 border-[#CC0000] pb-8 mb-12">
                 <div className="flex items-center gap-6">
-                  <img src={targetLogo} alt="Target Logo" className="h-48 w-auto object-contain" />
+                  <img src={targetLogo} alt="Target Logo" className="h-80 w-auto object-contain" />
                 </div>
                 <div className="text-right">
                   <h1 className="text-4xl font-black text-[#003399] uppercase tracking-tighter">Cotización</h1>
@@ -3339,6 +3339,59 @@ const RoutePlanner: React.FC = () => {
                   </tfoot>
                 </table>
                 <p className="text-right text-[10px] text-slate-400 mt-2 uppercase font-bold tracking-widest">* precios en moneda nacional (MXN) + iva</p>
+              </div>
+
+              {/* Detalle de Rutas (Expediente Técnico) */}
+              <div className="mb-12">
+                <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">Expediente Técnico de Rutas</h3>
+                <div className="space-y-8">
+                  {optimizedRoutes.map((route, idx) => (
+                    <div key={route.id} className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden break-inside-avoid">
+                      {/* Route Header */}
+                      <div className="bg-[#030712] text-white px-6 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="bg-[#CC0000] text-xs font-black px-3 py-1 rounded uppercase tracking-wider">
+                            R-{String(idx + 1).padStart(2, '0')}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold uppercase tracking-wide">{route.driverName || 'Operador Asignado'}</p>
+                            <p className="text-[10px] text-slate-400 uppercase">{route.stops.length} Tiendas • {route.direction || 'Ruta Nacional'}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[10px] uppercase font-bold text-slate-500">Recorrido Total</p>
+                          <p className="text-lg font-black">{Math.round(route.totalKm).toLocaleString()} km</p>
+                        </div>
+                      </div>
+
+                      {/* Stores Table */}
+                      <div className="p-6">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-slate-200 text-slate-400 uppercase tracking-wider">
+                              <th className="py-2 text-left font-bold w-12">No.</th>
+                              <th className="py-2 text-left font-bold">Punto de Venta / Sitio</th>
+                              <th className="py-2 text-left font-bold">Dirección / Ciudad</th>
+                              <th className="py-2 text-right font-bold w-24">ID</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {route.stops.map((stop: any, sIdx: number) => (
+                              <tr key={sIdx} className="hover:bg-white transition-colors">
+                                <td className="py-3 text-slate-400 font-medium">{sIdx + 1}</td>
+                                <td className="py-3 text-slate-700 font-bold">{stop.name_sitio}</td>
+                                <td className="py-3 text-slate-500">
+                                  {stop.direccion_completa ? stop.direccion_completa.substring(0, 40) + '...' : (stop.city || stop.estado || 'N/A')}
+                                </td>
+                                <td className="py-3 text-right text-slate-400 font-mono text-[10px]">{stop.site_id || 'S-' + sIdx}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Footer Legales */}
