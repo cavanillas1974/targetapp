@@ -21,7 +21,27 @@ export const LogicEngine = {
      * FULL_ADDRESS = DIRECCION_COMPLETA + ", " + Colonia + ", " + Alcaldia_Municipio + ", " + Estado + ", " + CP + ", México"
      */
     deriveFullAddress(site: Partial<SiteRecord>): string {
-        return `${site.direccion_completa || ''}, ${site.colonia || ''}, ${site.municipio || site.city || ''}, ${site.state || ''}, ${site.cp || ''}, México`.replace(/, ,/g, ',').trim();
+        let full = (site.direccion_completa || '').trim();
+
+        // Helper para no concatenar info redundante que confunda a Google Maps
+        const appendIfMissing = (txt: string, part?: string) => {
+            if (part && part.trim().length > 0 && !txt.toLowerCase().includes(part.toLowerCase())) {
+                return `${txt}, ${part}`;
+            }
+            return txt;
+        };
+
+        full = appendIfMissing(full, site.colonia);
+        full = appendIfMissing(full, site.municipio || site.city);
+        full = appendIfMissing(full, site.state);
+        full = appendIfMissing(full, site.cp);
+
+        // Asegurar país
+        if (!full.toLowerCase().includes('mex') && !full.toLowerCase().includes('méx')) {
+            full += ', México';
+        }
+
+        return full.replace(/, ,/g, ',').replace(/,,/g, ',').trim();
     },
 
     /**

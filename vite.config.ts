@@ -5,9 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
-    base: '/targetapp/', // Para que funcione en GitHub Pages
+    base: mode === 'production' ? '/targetapp/' : '/', // Solo usar base path en producción (GitHub Pages)
     server: {
-      port: 3000,
+      port: 5173,
       host: '0.0.0.0',
     },
     plugins: [react()],

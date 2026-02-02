@@ -99,9 +99,17 @@ export const exportService = {
             const wsRoute = XLSX.utils.json_to_sheet(routeData);
             XLSX.utils.book_append_sheet(wb, wsRoute, sheetName);
 
-            // CSV individual
-            const csvContent = XLSX.utils.sheet_to_csv(wsRoute);
-            csvFolder?.file(`${sheetName}.csv`, csvContent);
+            // CSV individual con Header Corporativo
+            const csvBody = XLSX.utils.sheet_to_csv(wsRoute);
+            const csvHeader = [
+                "TARGET INSTALACIONES POP",
+                `REPORTE DE CUADRILLA: ${route.id}`,
+                `OPERADOR: ${route.driverName || 'Por Asignar'}`,
+                "----------------------------------------",
+                ""
+            ].join("\n");
+
+            csvFolder?.file(`${sheetName}.csv`, csvHeader + csvBody);
         }
 
         // -- 3) HOJA VALIDACION_DIRECCIONES --
@@ -186,12 +194,24 @@ export const exportService = {
         });
 
         const ws = XLSX.utils.json_to_sheet(detailData);
-        const csv = XLSX.utils.sheet_to_csv(ws);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const csvData = XLSX.utils.sheet_to_csv(ws);
+
+        // Header Corporativo para CSV
+        const header = [
+            "TARGET INSTALACIONES POP",
+            "REPORTE OPERATIVO DE RUTA / CUADRILLA: " + route.id,
+            "FECHA DE EMISIÓN: " + new Date().toLocaleDateString(),
+            "--------------------------------------------------",
+            ""
+        ].join("\n");
+
+        const finalCsv = header + csvData;
+
+        const blob = new Blob([finalCsv], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `CUADRILLA_${route.id}.csv`;
+        link.download = `CUADRILLA_${route.id}_Branded.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

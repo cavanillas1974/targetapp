@@ -30,6 +30,7 @@ import {
 } from 'recharts';
 import targetLogo from '../Images/logo.png';
 import LZString from 'lz-string';
+import * as XLSX from 'xlsx';
 
 const RoutePlanner: React.FC = () => {
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
@@ -90,6 +91,7 @@ const RoutePlanner: React.FC = () => {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [showQuotation, setShowQuotation] = useState(false);
   const [showRouteEditor, setShowRouteEditor] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const workloadData = useMemo(() => {
     if (optimizedRoutes.length === 0) return [];
@@ -428,6 +430,7 @@ const RoutePlanner: React.FC = () => {
         setMapReady(true);
 
         const bounds = new (window as any).google.maps.LatLngBounds();
+        const infoWindow = new (window as any).google.maps.InfoWindow();
 
         // Filtrar rutas según la selección
         const routesToShow = optimizedRoutes.filter(r =>
@@ -451,27 +454,57 @@ const RoutePlanner: React.FC = () => {
             bounds.extend(pos);
 
             // Marcador Premium AntiGravity
-            new (window as any).google.maps.Marker({
+            const marker = new (window as any).google.maps.Marker({
               position: pos,
               map,
-              title: `${idx + 1}. ${stop.name_sitio}`,
+              title: `${stop.name_sitio}\nRuta ${route.id} - P${idx + 1}\n${(stop as any).direccion_normalizada || stop.formatted_address || ''}`,
+              clickable: true,
               label: {
-                text: (idx + 1).toString(),
+                text: `R${String(route.id).replace(/\D/g, '')}-${idx + 1}`,
                 color: "white",
-                fontSize: "11px",
-                fontWeight: "black",
-                className: "map-label-outline" // CSS clase para legibilidad extra
+                fontSize: "9px",
+                fontWeight: "bold",
+                className: "map-label-outline"
               },
               icon: {
                 path: 'M 0,-1.5 A 1.5,1.5 0 1,1 0,1.5 A 1.5,1.5 0 1,1 0,-1.5 Z', // Círculo perfecto SVG
                 fillColor: baseColor,
                 fillOpacity: 1,
-                strokeWeight: 3,
+                strokeWeight: 2,
                 strokeColor: "#ffffff",
-                scale: 12,
+                scale: 16,
                 labelOrigin: new (window as any).google.maps.Point(0, 0)
               },
               zIndex: 1000 + idx
+            });
+
+            // Acción de Click: Mostrar InfoWindow con detalles y link
+            marker.addListener("click", () => {
+              const address = (stop as any).direccion_normalizada || stop.formatted_address || stop.full_address_derived || "Ubicación Georreferenciada";
+
+              // Construir query de alta precisión
+              const query = stop.lat && stop.lng
+                ? `${stop.lat},${stop.lng}`
+                : `${stop.name_sitio}, ${address}`;
+
+              const contentString = `
+                <div style="color:#0f172a; padding:4px; max-width:220px; font-family: sans-serif;">
+                  <h3 style="margin:0 0 4px 0; font-weight:800; font-size:13px; text-transform:uppercase;">${stop.name_sitio}</h3>
+                  <p style="margin:0 0 8px 0; font-size:10px; color:#64748b; line-height:1.4;">${address}</p>
+                  
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                     <span style="background:${baseColor}; color:white; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold; letter-spacing:1px;">RUTA ${String(route.id).replace(/\D/g, '')}</span>
+                     <span style="background:#f1f5f9; color:#475569; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:bold;">SEQ #${idx + 1}</span>
+                  </div>
+
+                  <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}" target="_blank" style="display:inline-block; width:100%; text-align:center; background:#2563eb; color:white; padding:6px 0; border-radius:6px; font-weight:bold; font-size:10px; text-decoration:none; box-shadow:0 2px 5px rgba(37,99,235,0.2);">
+                    📍 ABRIR EN GOOGLE MAPS
+                  </a>
+                </div>
+               `;
+
+              infoWindow.setContent(contentString);
+              infoWindow.open(map, marker);
             });
           });
 
@@ -497,104 +530,132 @@ const RoutePlanner: React.FC = () => {
     }
   }, [activeTab, optimizedRoutes, mapFilters, depots, isLightMode]);
 
+  const processFileRows = (headers: string[], rows: any[][]) => {
+    const originalHeaders = headers.map(h =>
+      h.trim().replace(/^["']|["']$/g, '').replace(/^\uFEFF/, '')
+    );
+    setFileHeaders(originalHeaders);
+
+    const upperHeaders = originalHeaders.map(h => h.toUpperCase().trim());
+
+    // Búsqueda inteligente de columnas (Lax Mapping)
+    const findCol = (possibilities: string[]) => {
+      for (const p of possibilities) {
+        const idx = upperHeaders.findIndex(h => h === p.toUpperCase() || h.includes(p.toUpperCase()));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    const idxs = {
+      id: findCol(['ID_TIENDA', 'ID', 'CODIGO', 'SITE_ID', 'SITIO_ID', 'ID SITIO']),
+      name: findCol(['NOMBRE_TIENDA', 'NOMBRE', 'SITE_NAME', 'TIENDA', 'SITIO', 'NOMBRE SITIO']),
+      marca: findCol(['MARCA', 'CLIENTE', 'BRAND', 'NEGOCIO']),
+      region: findCol(['REGION', 'ZONA', 'AREA', 'TERRITORIO']),
+      ranking: findCol(['RANKING', 'PRIORIDAD', 'IMPORTANCIA', 'NIVEL']),
+      city: findCol(['CIUDAD', 'CITY', 'LOCALIDAD', 'POBLACION']),
+      state: findCol(['ESTADO', 'STATE', 'ENTIDAD', 'PROVINCIA']),
+      municipio: findCol(['ALCALDIA_MUNICIPIO', 'MUNICIPIO', 'ALCALDIA', 'DELEGACION']),
+      cp: findCol(['CP', 'CODIGO POSTAL', 'POSTAL_CODE', 'ZIP']),
+      colonia: findCol(['COLONIA', 'NEIGHBORHOOD', 'BARRIO', 'FRACCIONAMIENTO']),
+      address: findCol(['DIRECCION_COMPLETA', 'DIRECCION', 'ADDRESS', 'CALLE_Y_NUMERO', 'CALLE'])
+    };
+
+    const data = rows.map((cols, i) => {
+      const raw_data: Record<string, string> = {};
+      originalHeaders.forEach((header, hIdx) => {
+        raw_data[header] = String(cols[hIdx] || '').trim();
+      });
+
+      const rawSite: Partial<SiteRecord> = {
+        site_id: (idxs.id !== -1 ? String(cols[idxs.id] || '') : '') || `T-${1000 + i}`,
+        name_sitio: (idxs.name !== -1 ? String(cols[idxs.name] || '') : '') || `TIENDA ${1000 + i}`,
+        marca: (idxs.marca !== -1 ? String(cols[idxs.marca] || '') : '') || 'TIENDA',
+        region: (idxs.region !== -1 ? String(cols[idxs.region] || '') : '') || 'CENTRO',
+        ranking: (idxs.ranking !== -1 ? String(cols[idxs.ranking] || '') : '') || 'B',
+        city: (idxs.city !== -1 ? String(cols[idxs.city] || '') : '') || '',
+        state: (idxs.state !== -1 ? String(cols[idxs.state] || '') : '') || '',
+        municipio: (idxs.municipio !== -1 ? String(cols[idxs.municipio] || '') : '') || '',
+        cp: (idxs.cp !== -1 ? String(cols[idxs.cp] || '') : '') || '',
+        colonia: (idxs.colonia !== -1 ? String(cols[idxs.colonia] || '') : '') || '',
+        direccion_completa: (idxs.address !== -1 ? String(cols[idxs.address] || '') : '') || 'DIRECCIÓN NO PROPORCIONADA',
+        raw_data
+      };
+
+      // Paso 2 — Limpieza y FULL_ADDRESS
+      const full_address_derived = LogicEngine.deriveFullAddress(rawSite);
+
+      return {
+        ...rawSite,
+        id: crypto.randomUUID(),
+        full_address_derived,
+        status: AddressStatus.PENDING,
+        notes: 'Pendiente de Geocodificación',
+        confidence_score: 0,
+      } as SiteRecord;
+    });
+
+    setSites(data);
+    saveProject(data, [], [], config);
+    setActiveStep(2);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
+    if (!file) return;
+
+    const fileName = file.name.toLowerCase();
+    const reader = new FileReader();
+
+    if (fileName.endsWith('.csv')) {
       reader.onload = (event) => {
         const text = event.target?.result as string;
         setFileContent(text);
-
         try {
-          const rows = text.split(/\r?\n/).filter(r => r.trim());
-          if (rows.length === 0) return;
+          const lines = text.split(/\r?\n/).filter(r => r.trim());
+          if (lines.length === 0) return;
 
-          const firstRow = rows[0];
-          // Detección robusta de delimitador
+          const firstRow = lines[0];
           const delimiters = [',', ';', '\t', '|'];
           const counts = delimiters.map(d => ({ d, count: firstRow.split(d).length }));
           const delimiter = counts.sort((a, b) => b.count - a.count)[0].d;
 
-          const originalHeaders = firstRow.split(delimiter).map(h =>
-            h.trim().replace(/^["']|["']$/g, '').replace(/^\uFEFF/, '')
+          const headers = firstRow.split(delimiter);
+          const rows = lines.slice(1).map(row =>
+            row.split(new RegExp(`${delimiter === '|' ? '\\|' : delimiter}(?=(?:(?:[^"]*"){2})*[^"]*$)`))
+              .map(c => c.trim().replace(/^["']|["']$/g, ''))
           );
-          setFileHeaders(originalHeaders);
 
-          const headers = originalHeaders.map(h => h.toUpperCase().trim());
-
-          // Búsqueda inteligente de columnas (Lax Mapping)
-          const findCol = (possibilities: string[]) => {
-            for (const p of possibilities) {
-              const idx = headers.findIndex(h => h === p.toUpperCase() || h.includes(p.toUpperCase()));
-              if (idx !== -1) return idx;
-            }
-            return -1;
-          };
-
-          const idxs = {
-            id: findCol(['ID_TIENDA', 'ID', 'CODIGO', 'SITE_ID', 'SITIO_ID', 'ID SITIO']),
-            name: findCol(['NOMBRE_TIENDA', 'NOMBRE', 'SITE_NAME', 'TIENDA', 'SITIO', 'NOMBRE SITIO']),
-            marca: findCol(['MARCA', 'CLIENTE', 'BRAND', 'NEGOCIO']),
-            region: findCol(['REGION', 'ZONA', 'AREA', 'TERRITORIO']),
-            ranking: findCol(['RANKING', 'PRIORIDAD', 'IMPORTANCIA', 'NIVEL']),
-            city: findCol(['CIUDAD', 'CITY', 'LOCALIDAD', 'POBLACION']),
-            state: findCol(['ESTADO', 'STATE', 'ENTIDAD', 'PROVINCIA']),
-            municipio: findCol(['ALCALDIA_MUNICIPIO', 'MUNICIPIO', 'ALCALDIA', 'DELEGACION']),
-            cp: findCol(['CP', 'CODIGO POSTAL', 'POSTAL_CODE', 'ZIP']),
-            colonia: findCol(['COLONIA', 'NEIGHBORHOOD', 'BARRIO', 'FRACCIONAMIENTO']),
-            address: findCol(['DIRECCION_COMPLETA', 'DIRECCION', 'ADDRESS', 'CALLE_Y_NUMERO', 'CALLE'])
-          };
-
-          const data = rows.slice(1).map((row, i) => {
-            const cols = row.split(new RegExp(`${delimiter === '|' ? '\\|' : delimiter}(?=(?:(?:[^"]*"){2})*[^"]*$)`)).map(c => c.trim().replace(/^["']|["']$/g, ''));
-
-            const raw_data: Record<string, string> = {};
-            originalHeaders.forEach((header, hIdx) => {
-              raw_data[header] = cols[hIdx] || '';
-            });
-
-            const rawSite: Partial<SiteRecord> = {
-              site_id: (idxs.id !== -1 ? cols[idxs.id] : '') || `T-${1000 + i}`,
-              name_sitio: (idxs.name !== -1 ? cols[idxs.name] : '') || `TIENDA ${1000 + i}`,
-              marca: (idxs.marca !== -1 ? cols[idxs.marca] : '') || 'TIENDA',
-              region: (idxs.region !== -1 ? cols[idxs.region] : '') || 'CENTRO',
-              ranking: (idxs.ranking !== -1 ? cols[idxs.ranking] : '') || 'B',
-              city: (idxs.city !== -1 ? cols[idxs.city] : '') || '',
-              state: (idxs.state !== -1 ? cols[idxs.state] : '') || '',
-              municipio: (idxs.municipio !== -1 ? cols[idxs.municipio] : '') || '',
-              cp: (idxs.cp !== -1 ? cols[idxs.cp] : '') || '',
-              colonia: (idxs.colonia !== -1 ? cols[idxs.colonia] : '') || '',
-              direccion_completa: (idxs.address !== -1 ? cols[idxs.address] : '') || 'DIRECCIÓN NO PROPORCIONADA',
-              raw_data
-            };
-
-            // Paso 2 — Limpieza y FULL_ADDRESS
-            const full_address_derived = LogicEngine.deriveFullAddress(rawSite);
-
-            return {
-              ...rawSite,
-              id: crypto.randomUUID(),
-              full_address_derived,
-              status: AddressStatus.PENDING,
-              notes: 'Pendiente de Geocodificación',
-              confidence_score: 0,
-            } as SiteRecord;
-          });
-
-          setSites(data);
-          // MANTENER EL NOMBRE DE PROYECTO DEFINIDO POR EL USUARIO
-          // const newProjectName = file.name.replace('.csv', '').replace('.xlsx', '').toUpperCase();
-          // setProjectName(newProjectName);
-
-          // Guardamos con el nombre actual (state projectName)
-          saveProject(data, [], [], config);
-          setActiveStep(2);
+          processFileRows(headers, rows);
         } catch (err) {
-          console.error("Error parsing file", err);
-          setError("Error al leer el archivo. Verifica que las columnas coincidan con las requeridas.");
+          console.error("Error parsing CSV", err);
+          setError("Error al leer el archivo CSV. Verifica el formato.");
         }
       };
       reader.readAsText(file);
+    } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      reader.onload = (event) => {
+        try {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          if (jsonData.length === 0) return;
+
+          const headers = jsonData[0].map(h => String(h || ''));
+          const rows = jsonData.slice(1);
+
+          processFileRows(headers, rows);
+        } catch (err) {
+          console.error("Error parsing Excel", err);
+          setError("Error al leer el archivo Excel. Asegúrate de que no esté protegido.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      setError("Formato de archivo no soportado. Usa .csv, .xlsx o .xls");
     }
   };
 
@@ -872,13 +933,13 @@ const RoutePlanner: React.FC = () => {
 
 
 
-  const handleExportQuotationPDF = async () => {
+  const handleExportQuotationPDF = async (pageSelector: string = '.pdf-page', filenamePrefix: string = 'Expediente_Tecnico') => {
     setIsExporting(true);
 
     // 1. Identificar todas las "páginas" del template
-    const pages = document.querySelectorAll('.pdf-page');
+    const pages = document.querySelectorAll(pageSelector);
     if (pages.length === 0) {
-      console.error("No pages found for PDF export");
+      console.error(`No pages found for PDF export with selector: ${pageSelector}`);
       setIsExporting(false);
       return;
     }
@@ -929,7 +990,7 @@ const RoutePlanner: React.FC = () => {
         pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight); // Usar alias JPEG (optimizado)
       }
 
-      pdf.save(`Cotizacion_Target_${projectName.replace(/\s+/g, '_')}.pdf`);
+      pdf.save(`${filenamePrefix}_${projectName.replace(/\s+/g, '_')}.pdf`);
     } catch (err) {
       console.error("Error exporting PDF:", err);
     } finally {
@@ -1287,14 +1348,14 @@ const RoutePlanner: React.FC = () => {
             </label>
             <h2 className={`text-4xl font-black tracking-tighter mb-4 italic uppercase ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Cargar Universo de Datos</h2>
             <p className={`${isLightMode ? 'text-slate-500' : 'text-slate-400'} text-lg max-w-xl mx-auto leading-relaxed font-medium`}>
-              El sistema realizará una <strong>limpieza GIS predictiva</strong> automáticamente.
+              Sube tu archivo <strong>CSV o Excel (.xlsx, .xls)</strong> y el sistema realizará una <strong>limpieza GIS predictiva</strong> automáticamente.
             </p>
             <input
               type="file"
               id="master-upload"
               className="hidden"
               onChange={handleFileUpload}
-              accept=".csv"
+              accept=".csv, .xlsx, .xls"
               disabled={!projectName.trim()}
             />
             <label
@@ -1344,14 +1405,28 @@ const RoutePlanner: React.FC = () => {
                 <button
                   onClick={startCleaning}
                   disabled={isCleaning}
-                  className="bg-emerald-600 hover:bg-emerald-500 px-12 py-5 rounded-2xl font-black text-sm disabled:opacity-50 flex items-center gap-4 transition-all h-[64px] shadow-[0_20px_40px_-10px_rgba(16,185,129,0.3)]"
+                  className="group relative overflow-hidden bg-gradient-to-r from-emerald-600 to-teal-600 disabled:opacity-50 rounded-2xl p-0.5 transition-all duration-300 hover:scale-[1.02] shadow-[0_20px_50px_-12px_rgba(16,185,129,0.5)]"
                 >
-                  {isCleaning ? (
-                    <>
-                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
-                      Procesando Geocodificación
-                    </>
-                  ) : 'Iniciar Limpieza & GIS'}
+                  <div className="relative bg-[#0f172a] hover:bg-[#0f172a]/90 h-full w-full rounded-[14px] px-8 py-4 flex items-center gap-6 transition-all">
+                    {/* Icon Box */}
+                    <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center border border-emerald-500/30 group-hover:bg-emerald-500 group-hover:text-white text-emerald-400 transition-all duration-300">
+                      {isCleaning ? (
+                        <div className="w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12V7l-8-5-8 5v5l8 5 8-5z" /><path d="M3.27 6.96L12 12.01l8.73-5.05" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
+                      )}
+                    </div>
+
+                    <div className="text-left">
+                      <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Automated Process</p>
+                      <p className="text-lg font-black text-white italic tracking-tight">{isCleaning ? 'PROCESANDO DATA...' : 'INICIAR LIMPIEZA & GIS'}</p>
+                    </div>
+
+                    {/* Tech Decor */}
+                    <div className="absolute top-0 right-0 p-2 opacity-30">
+                      <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></div>
+                    </div>
+                  </div>
                 </button>
               </div>
             </div>
@@ -1642,8 +1717,31 @@ const RoutePlanner: React.FC = () => {
               {[
                 { label: 'Rutas Totales', val: optimizedRoutes.length, icon: '🚚', color: 'text-blue-500' },
                 { label: 'KM Estimados', val: `${optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0).toFixed(0)}`, icon: '📍', color: 'text-emerald-500' },
-                { label: 'Horas Totales', val: `${(optimizedRoutes.reduce((acc, r) => acc + (r.estTimeMinutes || 0), 0) / 60).toFixed(1)}h`, icon: '⏱️', color: 'text-purple-500' },
-                { label: 'Costo Gasolina', val: `$${(optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0) * 3.5).toFixed(0)}`, icon: '⛽', color: 'text-orange-500' }
+                { label: 'Cantidad de Tiendas', val: `${optimizedRoutes.reduce((acc, r) => acc + (r.stops?.length || 0), 0)}`, icon: '🏪', color: 'text-purple-500' },
+                {
+                  label: 'Días Trabajados',
+                  val: (() => {
+                    const totalDays = optimizedRoutes.reduce((acc, route) => {
+                      const dates = (route.stops || [])
+                        .map((s: any) => s.scheduled_date ? new Date(s.scheduled_date) : null)
+                        .filter((d): d is Date => d !== null);
+
+                      if (dates.length === 0) return acc + (route.stops?.length > 0 ? 1 : 0);
+
+                      const times = dates.map(d => d.getTime());
+                      const min = Math.min(...times);
+                      const max = Math.max(...times);
+
+                      // Difference in days + 1 (inclusive)
+                      const diffDays = Math.floor((max - min) / (1000 * 60 * 60 * 24)) + 1;
+
+                      return acc + diffDays;
+                    }, 0);
+                    return totalDays;
+                  })(),
+                  icon: '📅',
+                  color: 'text-orange-500'
+                }
               ].map((kpi, i) => (
                 <div key={i} className={`${isLightMode ? 'bg-white border-slate-200 shadow-lg' : 'bg-slate-900/60 border-slate-800 shadow-xl backdrop-blur-xl'} border p-6 rounded-[2.5rem] transition-all`}>
                   <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>{kpi.label}</p>
@@ -2436,7 +2534,7 @@ const RoutePlanner: React.FC = () => {
                                     <p className={`text-[9px] font-black uppercase tracking-widest mr-4 shrink-0 ${isLightMode ? 'text-slate-400' : 'text-slate-600'}`}>Secuencia:</p>
                                     {(route.stops || []).map((s: any, i: number) => (
                                       <div key={s.id} className="flex items-center shrink-0">
-                                        <div className={`w-8 h-8 rounded-lg border flex items-center justify-center text-[10px] font-black transition-all ${s.locked ? 'bg-amber-400/20 border-amber-400/40 text-amber-500' : (isLightMode ? 'bg-white border-slate-200 text-slate-400' : 'bg-slate-900 border-white/10 text-slate-500 group-hover:text-blue-400')}`}>
+                                        <div className={`w-8 h-8 rounded-lg border flex items-center justify-center text-[10px] font-black transition-all flex-shrink-0 ${s.locked ? 'bg-amber-400/20 border-amber-400/40 text-amber-500' : (isLightMode ? 'bg-white border-slate-200 text-slate-400' : 'bg-slate-900 border-white/10 text-slate-500 group-hover:text-blue-400')}`}>
                                           {i + 1}
                                         </div>
                                         {i < route.stops.length - 1 && (
@@ -2773,9 +2871,21 @@ const RoutePlanner: React.FC = () => {
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="m15 18-6-6 6-6" /></svg>
                             Volver a Listado
                           </button>
-                          <div className="text-right">
-                            <h3 className={`text-3xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Bitácora Cuadrilla {activeRouteForEvidence.id}</h3>
-                            <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mt-1">{activeRouteForEvidence.base} • {activeRouteForEvidence.stops.length} TIENDAS</p>
+                          <div className="flex items-center justify-end gap-4">
+                            <div className="text-right">
+                              <h3 className={`text-3xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Bitácora Operativa</h3>
+                              <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] mt-1">{activeRouteForEvidence.base} • {activeRouteForEvidence.stops.length} TIENDAS</p>
+                            </div>
+                            <div
+                              className="w-16 h-16 rounded-full flex items-center justify-center border-4 text-xl font-black shadow-2xl transition-transform hover:scale-110"
+                              style={{
+                                backgroundColor: activeRouteForEvidence.color,
+                                borderColor: isLightMode ? '#fff' : 'rgba(255,255,255,0.1)',
+                                color: '#fff'
+                              }}
+                            >
+                              R{activeRouteForEvidence.id.replace(/\D/g, '')}
+                            </div>
                           </div>
                         </div>
 
@@ -3284,17 +3394,56 @@ const RoutePlanner: React.FC = () => {
                   </p>
                 </div>
                 <div className="flex gap-4">
-                  <button
-                    onClick={handleExportQuotationPDF}
-                    className="bg-emerald-600 text-white px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:bg-emerald-500 transition-all flex items-center gap-4 active:scale-95 group"
-                  >
-                    {isExporting ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    ) : (
-                      <span className="group-hover:-translate-y-1 transition-transform">📄</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowExportMenu(!showExportMenu)}
+                      className="bg-emerald-600 text-white px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:bg-emerald-500 transition-all flex items-center gap-4 active:scale-95 group z-50 relative"
+                    >
+                      {isExporting ? (
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      ) : (
+                        <span className="group-hover:-translate-y-1 transition-transform">📄</span>
+                      )}
+                      PDF / Entregables
+                    </button>
+
+                    {showExportMenu && (
+                      <>
+                        <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-sm" onClick={() => setShowExportMenu(false)}></div>
+                        <div className="absolute bottom-full right-0 mb-4 w-96 bg-white rounded-3xl shadow-2xl border border-slate-100 p-6 z-50 animate-in slide-in-from-bottom-4 zoom-in-95 duration-200">
+                          <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-6 border-b border-slate-100 pb-2">Selecciona el Formato</h5>
+
+                          <button
+                            onClick={() => {
+                              setShowExportMenu(false);
+                              handleExportQuotationPDF('.pdf-page-exec', 'Propuesta_Ejecutiva');
+                            }}
+                            className="w-full text-left p-4 rounded-2xl hover:bg-slate-50 transition-colors flex items-center gap-4 group mb-2 border border-transparent hover:border-slate-200"
+                          >
+                            <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center text-xl shadow-lg group-hover:scale-110 transition-transform">💎</div>
+                            <div>
+                              <p className="text-sm font-black text-slate-900 group-hover:text-blue-600 uppercase">Propuesta Ejecutiva</p>
+                              <p className="text-[10px] text-slate-400 font-medium">Resumen financiero de alto impacto. Ideal para Dirección.</p>
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setShowExportMenu(false);
+                              handleExportQuotationPDF('.pdf-page', 'Expediente_Tecnico');
+                            }}
+                            className="w-full text-left p-4 rounded-2xl hover:bg-slate-50 transition-colors flex items-center gap-4 group border border-transparent hover:border-slate-200"
+                          >
+                            <div className="w-12 h-12 rounded-xl bg-slate-900 text-white flex items-center justify-center text-xl shadow-lg group-hover:scale-110 transition-transform">🛠</div>
+                            <div>
+                              <p className="text-sm font-black text-slate-900 group-hover:text-blue-600 uppercase">Expediente Técnico</p>
+                              <p className="text-[10px] text-slate-400 font-medium">Desglose operativo completo ruta por ruta.</p>
+                            </div>
+                          </button>
+                        </div>
+                      </>
                     )}
-                    Descargar PDF Formal
-                  </button>
+                  </div>
                   <button
                     onClick={handleApproveBudget}
                     className="bg-white text-blue-600 px-12 py-8 rounded-[2.5rem] font-black uppercase tracking-[0.3em] text-[11px] shadow-2xl hover:scale-105 transition-all flex items-center gap-4 active:scale-95"
@@ -3305,209 +3454,395 @@ const RoutePlanner: React.FC = () => {
               </div>
             </div>
 
-            {/* Template Oculto para PDF Formal */}
-            {/* =================================================================================
-                TEMPLATE DE PDF MULTIPÁGINA (Paginación Explícita)
-                ================================================================================= */}
+            {/* Template Oculto para PDF Formal con Paginación Inteligente */}
             <div id="pdf-container" className="fixed left-[-9999px] top-0">
 
-              {/* --- PÁGINA 1: PORTADA Y RESUMEN --- */}
-              <div className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-16 font-sans relative flex flex-col justify-between border border-gray-200">
+              {/* Lógica de Paginación (IIFE) */}
+              {(() => {
+                const MAX_PAGE_HEIGHT = 800;
+                const BASE_ROUTE_HEADER = 160;
+                const STOP_ROW_HEIGHT = 55;
 
-                <div>
-                  {/* Header */}
-                  <div className="flex items-start justify-between border-b-4 border-[#CC0000] pb-8 mb-12 relative z-10">
-                    <img src={targetLogo} alt="Target Logo" className="h-40 w-auto object-contain" />
-                    <div className="text-right">
-                      <h1 className="text-5xl font-black text-[#003399] uppercase tracking-tighter mb-2">Expediente</h1>
-                      <p className="text-[#CC0000] font-bold text-lg uppercase tracking-widest">Propuesta Económica</p>
-                      <p className="text-slate-400 text-sm mt-2">{new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                    </div>
-                  </div>
+                const pdfPages: any[][] = [];
+                let currentPageRoutes: any[] = [];
+                let currentPageHeight = 0;
 
-                  {/* Project Info Big Card (SIMPLIFIED FOR LIGHTER PDF) */}
-                  <div className="bg-[#003399] text-white p-10 rounded-xl mb-12">
+                optimizedRoutes.forEach((route) => {
+                  const totalRouteHeight = BASE_ROUTE_HEADER + (route.stops.length * STOP_ROW_HEIGHT);
 
-                    <p className="text-blue-200 font-bold uppercase tracking-widest text-xs mb-1">Proyecto / Campaña</p>
-                    <h2 className="text-3xl font-black italic uppercase tracking-tight mb-8 relative z-10">{projectName}</h2>
+                  // Caso 1: La ruta cabe completa en la página actual
+                  if (currentPageHeight + totalRouteHeight < MAX_PAGE_HEIGHT) {
+                    currentPageRoutes.push(route);
+                    currentPageHeight += totalRouteHeight;
+                  }
+                  // Caso 2: La ruta es GIGANTE (Mayor que una página entera) -> Fracturar
+                  else if (totalRouteHeight > MAX_PAGE_HEIGHT) {
+                    // Si ya habia algo en la página actual, la cerramos
+                    if (currentPageRoutes.length > 0) {
+                      pdfPages.push(currentPageRoutes);
+                      currentPageRoutes = [];
+                      currentPageHeight = 0;
+                    }
 
-                    <div className="grid grid-cols-3 gap-8 border-t border-blue-800 pt-8 relative z-10">
-                      <div>
-                        <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest">Cobertura</p>
-                        <p className="text-xl font-bold">{sites.length} <span className="text-sm font-normal text-slate-400">Puntos</span></p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest">Logística</p>
-                        <p className="text-xl font-bold">{quotationData.routesCount} <span className="text-sm font-normal text-slate-400">Rutas</span></p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest">Duración</p>
-                        <p className="text-xl font-bold">{quotationData.totalRouteDays} <span className="text-sm font-normal text-slate-400">Días Op.</span></p>
-                      </div>
-                    </div>
-                  </div>
+                    // Fracturar la ruta en chunks
+                    // Fracturar la ruta en chunks
+                    let remainingStops = [...route.stops];
+                    let currentGlobalIndex = 0; // Trackear índice real
+                    let part = 1;
 
-                  {/* Tabla Resumen */}
-                  <div className="mb-8">
-                    <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-6 border-b border-slate-200 pb-2">Desglose de Inversión</h3>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-slate-50 text-slate-500 uppercase text-xs tracking-widest">
-                          <th className="py-3 px-4 text-left font-black">Concepto</th>
-                          <th className="py-3 px-4 text-right font-black">Importe</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        <tr>
-                          <td className="py-4 px-4 font-bold text-slate-700">Gastos Operativos de Ruta (Gasolina, Peajes)</td>
-                          <td className="py-4 px-4 text-right font-bold">${Math.round(quotationData.fuelCost).toLocaleString()}</td>
-                        </tr>
-                        <tr>
-                          <td className="py-4 px-4 font-bold text-slate-700">Viáticos y Cuadrillas Técnicas</td>
-                          <td className="py-4 px-4 text-right font-bold">${Math.round(quotationData.totalViaticos).toLocaleString()}</td>
-                        </tr>
-                        <tr>
-                          <td className="py-4 px-4 font-bold text-emerald-600">Gestión Integral y Supervisión</td>
-                          <td className="py-4 px-4 text-right font-bold text-emerald-600">+ ${Math.round(quotationData.margin).toLocaleString()}</td>
-                        </tr>
-                      </tbody>
-                      <tfoot className="border-t-2 border-slate-900">
-                        <tr>
-                          <td className="py-6 px-4 text-right font-black uppercase text-xl text-[#003399]">Inversión Total</td>
-                          <td className="py-6 px-4 text-right font-black text-3xl text-[#CC0000]">${Math.round(quotationData.totalProjectValue).toLocaleString()}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                    <p className="text-right text-[10px] text-slate-400 mt-2 font-bold uppercase tracking-widest">* Precios más IVA • Moneda Nacional (MXN)</p>
-                  </div>
-                </div>
+                    while (remainingStops.length > 0) {
+                      const availableHeight = MAX_PAGE_HEIGHT - BASE_ROUTE_HEADER;
+                      const maxStops = Math.floor(availableHeight / STOP_ROW_HEIGHT);
 
-                {/* Footer Portada */}
-                <div className="border-t border-slate-200 pt-6">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-slate-400 max-w-md">Propuesta válida por 15 días naturales. Sujeta a disponibilidad de equipos al momento de la confirmación.</p>
-                    <p className="text-xs font-black text-[#003399]">PÁGINA 1 DE {Math.ceil(optimizedRoutes.length / 2) + 2}</p>
-                  </div>
-                </div>
-              </div>
+                      const chunk = remainingStops.slice(0, maxStops);
 
-              {/* --- PÁGINAS DE RUTAS (Loop Dinámico) --- */}
-              {Array.from({ length: Math.ceil(optimizedRoutes.length / 2) }).map((_, pageIndex) => (
-                <div key={pageIndex} className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-16 font-sans relative flex flex-col justify-between border border-gray-200">
-                  <div>
-                    {/* Header Simple */}
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-8">
-                      <div className="flex items-center gap-3 opacity-50">
-                        <img src={targetLogo} className="h-8 grayscale" alt="" />
-                        <span className="text-[10px] uppercase font-bold tracking-widest">Expediente Técnico</span>
-                      </div>
-                      <span className="text-[10px] font-black text-[#003399]">DETALLE OPERATIVO</span>
-                    </div>
+                      const routePart = {
+                        ...route,
+                        stops: chunk,
+                        isSplit: true,
+                        part,
+                        startIndex: currentGlobalIndex, // Guardar donde empieza
+                        totalParts: Math.ceil(route.stops.length / maxStops)
+                      };
 
-                    {/* Rutas (2 por página) */}
-                    <div className="space-y-8">
-                      {optimizedRoutes.slice(pageIndex * 2, (pageIndex * 2) + 2).map((route, rIdx) => (
-                        <div key={route.id} className="bg-slate-50 rounded-2xl border border-slate-200 overflow-hidden shadow-sm break-inside-avoid">
-                          {/* Route Card Header */}
-                          <div className="bg-[#003399] text-white px-6 py-4 flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className="bg-white text-[#003399] text-sm font-black w-10 h-10 rounded-lg flex items-center justify-center shadow-lg">
-                                {String((pageIndex * 2) + rIdx + 1).padStart(2, '0')}
-                              </div>
-                              <div>
-                                <p className="text-sm font-bold uppercase tracking-wide">{route.driverName}</p>
-                                <p className="text-[10px] text-blue-200 uppercase">
-                                  {route.stops.length} Tiendas • {
-                                    (() => {
-                                      const d = route.stops.map((s: any) => s.scheduled_date ? new Date(s.scheduled_date) : null).filter(Boolean) as Date[];
-                                      if (d.length === 0) return '1 Día';
-                                      const diff = Math.abs(Math.max(...d.map(x => x.getTime())) - Math.min(...d.map(x => x.getTime())));
-                                      return (Math.ceil(diff / (86400000)) + 1) + ' Días';
-                                    })()
-                                  } • {route.direction || 'Ruta Nacional'}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-[10px] uppercase font-bold text-blue-200">Total KM</p>
-                              <p className="text-lg font-black">{Math.round(route.totalKm).toLocaleString()}</p>
-                            </div>
-                          </div>
+                      pdfPages.push([routePart]);
 
-                          {/* Store List */}
-                          <div className="p-4">
-                            <table className="w-full text-xs">
-                              <thead>
-                                <tr className="border-b border-slate-200 text-slate-400 uppercase tracking-wider">
-                                  <th className="py-2 text-left w-8">#</th>
-                                  <th className="py-2 text-left">Tienda</th>
-                                  <th className="py-2 text-left">Ubicación</th>
-                                  <th className="py-2 text-right">ID</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {route.stops.map((stop: any, sIdx: number) => (
-                                  <tr key={sIdx} className="hover:bg-white text-[10px]">
-                                    <td className="py-1.5 text-slate-400 font-bold">{sIdx + 1}</td>
-                                    <td className="py-1.5 font-bold text-slate-700">{stop.name_sitio}</td>
-                                    <td className="py-1.5 text-slate-500 truncate max-w-[200px]">{stop.city || stop.estado}</td>
-                                    <td className="py-1.5 text-right text-slate-400 font-mono text-[9px]">{stop.site_id || '-'}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                      remainingStops = remainingStops.slice(maxStops);
+                      currentGlobalIndex += chunk.length; // Avanzar el índice
+                      part++;
+                    }
+                  }
+                  // Caso 3: La ruta cabe en una NUEVA página, pero no en la actual
+                  else {
+                    pdfPages.push(currentPageRoutes);
+                    currentPageRoutes = [route];
+                    currentPageHeight = totalRouteHeight;
+                  }
+                });
+
+                // Empujar el último remanente
+                if (currentPageRoutes.length > 0) {
+                  pdfPages.push(currentPageRoutes);
+                }
+
+                return (
+                  <>
+                    {/* --- PÁGINA 1: PORTADA EJECUTIVA --- */}
+                    <div className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 font-sans relative flex flex-col justify-between border border-gray-100">
+                      {/* Fondo Corporativo Sutil */}
+                      <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-50 rounded-bl-full opacity-50 z-0 pointer-events-none"></div>
+
+                      <div className="p-16 relative z-10 flex-1 flex flex-col">
+                        {/* Header Portada */}
+                        <div className="flex items-start justify-between border-b-4 border-[#CC0000] pb-8 mb-16">
+                          <img src={targetLogo} alt="Target Logo" className="h-44 w-auto object-contain" />
+                          <div className="text-right">
+                            <h1 className="text-6xl font-black text-[#003399] uppercase tracking-tighter mb-2">Expediente</h1>
+                            <p className="text-[#CC0000] font-bold text-xl uppercase tracking-[0.3em]">Propuesta Económica</p>
+                            <p className="text-slate-400 text-sm mt-4 font-bold">{new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                           </div>
                         </div>
-                      ))}
+
+                        {/* Card Principal */}
+                        <div className="bg-[#003399] text-white p-12 rounded-[2rem] mb-16 shadow-2xl relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-3xl -mr-16 -mt-16"></div>
+
+                          <p className="text-blue-200 font-bold uppercase tracking-widest text-xs mb-2">Proyecto / Campaña</p>
+                          <h2 className="text-4xl font-black italic uppercase tracking-tight mb-12 relative z-10">{projectName}</h2>
+
+                          <div className="grid grid-cols-3 gap-10 border-t border-blue-800/50 pt-10 relative z-10">
+                            <div>
+                              <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest mb-1">Cobertura</p>
+                              <p className="text-3xl font-black italic">{sites.length} <span className="text-sm font-normal text-blue-300 not-italic">Puntos</span></p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest mb-1">Logística</p>
+                              <p className="text-3xl font-black italic">{quotationData.routesCount} <span className="text-sm font-normal text-blue-300 not-italic">Rutas</span></p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest mb-1">Duración</p>
+                              <p className="text-3xl font-black italic">{quotationData.totalRouteDays} <span className="text-sm font-normal text-blue-300 not-italic">Días</span></p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Desglose Financiero */}
+                        <div className="mb-8 bg-slate-50 p-10 rounded-3xl border border-slate-200">
+                          <h3 className="text-sm font-black text-[#003399] uppercase tracking-widest mb-8 border-b border-slate-200 pb-4 flex items-center gap-3">
+                            <span>📊</span> Desglose de Inversión
+                          </h3>
+                          <table className="w-full text-sm">
+                            <tbody className="divide-y divide-slate-200">
+                              <tr>
+                                <td className="py-5 px-4 font-bold text-slate-700">Gastos Operativos de Ruta (Gasolina, Peajes - $15/km)</td>
+                                <td className="py-5 px-4 text-right font-mono font-bold text-slate-900">${Math.round(quotationData.fuelCost).toLocaleString()}</td>
+                              </tr>
+                              <tr>
+                                <td className="py-5 px-4 font-bold text-slate-700">Viáticos y Cuadrillas Técnicas ($2,000/día)</td>
+                                <td className="py-5 px-4 text-right font-mono font-bold text-slate-900">${Math.round(quotationData.totalViaticos).toLocaleString()}</td>
+                              </tr>
+                              <tr>
+                                <td className="py-5 px-4 font-bold text-emerald-600">Gestión Integral y Supervisión (Fee)</td>
+                                <td className="py-5 px-4 text-right font-mono font-bold text-emerald-600">+ ${Math.round(quotationData.margin).toLocaleString()}</td>
+                              </tr>
+                            </tbody>
+                            <tfoot className="border-t-2 border-slate-900">
+                              <tr>
+                                <td className="py-8 px-4 font-black uppercase text-xl text-[#003399]">Inversión Total</td>
+                                <td className="py-8 px-4 text-right font-black text-4xl text-[#CC0000] italic">${Math.round(quotationData.totalProjectValue).toLocaleString()}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                          <p className="text-right text-[9px] text-slate-400 mt-4 font-bold uppercase tracking-widest">* Precios más IVA • Moneda Nacional (MXN)</p>
+                        </div>
+                      </div>
+
+                      {/* Footer Portada */}
+                      <div className="bg-[#003399] p-8 text-white">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[10px] text-blue-200/80 max-w-md font-medium">Propuesta válida por 15 días naturales. Sujeta a disponibilidad de equipos al momento de la confirmación.</p>
+                          <p className="text-xs font-black uppercase tracking-widest">PÁGINA 1 DE {pdfPages.length + 2}</p>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Footer Página */}
-                  <div className="border-t border-slate-200 pt-6 mt-8">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest text-[#CC0000]">Target Instalaciones POP</p>
-                      <p className="text-xs font-black text-[#003399]">PÁGINA {pageIndex + 2} DE {Math.ceil(optimizedRoutes.length / 2) + 2}</p>
+                    {/* --- PÁGINAS DINÁMICAS DE RUTAS --- */}
+                    {pdfPages.map((pageRoutes, pageIndex) => (
+                      <div key={pageIndex} className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 font-sans relative flex flex-col justify-between border border-gray-200 overflow-hidden">
+
+                        <div className="p-12 pb-0 flex-1">
+                          {/* Header de Página */}
+                          <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-10">
+                            <div className="flex items-center gap-4">
+                              <img src={targetLogo} className="h-14 object-contain" alt="Target" />
+                              <div className="h-8 w-px bg-slate-200"></div>
+                              <span className="text-[11px] uppercase font-bold tracking-[0.2em] text-slate-400">Expediente Técnico</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <span className="text-sm font-black text-[#003399] uppercase tracking-widest">Detalle Operativo</span>
+                              <span className="text-[10px] font-bold text-slate-400">Hoja {pageIndex + 1}</span>
+                            </div>
+                          </div>
+
+                          {/* Contenedor de Rutas de la Página */}
+                          <div className="space-y-10">
+                            {pageRoutes.map((route, rIdx) => (
+                              <div key={`${route.id}-${rIdx}`} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+                                {/* Route Header Corporativo */}
+                                <div className="bg-[#0f172a] text-white px-8 py-5 flex items-center justify-between relative overflow-hidden">
+                                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#CC0000]"></div>
+                                  <div className="flex items-center gap-6 relative z-10">
+                                    <div className="bg-white text-[#0f172a] text-lg font-black w-14 h-14 rounded-xl flex items-center justify-center shadow-lg">
+                                      {String(route.id).replace(/\D/g, '')}
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-3">
+                                        <p className="text-lg font-bold uppercase tracking-wide">{route.driverName || 'Operador Asignado'}</p>
+                                        {route.isSplit && (
+                                          <span className="flex-shrink-0 bg-amber-500 text-black text-[10px] font-black px-3 py-1 rounded-md uppercase tracking-widest shadow-md whitespace-nowrap">
+                                            PARTE {route.part}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="text-[11px] text-slate-400 uppercase font-medium mt-0.5">
+                                        {route.isSplit ? 'Continuación de ruta...' : `${route.stops.length} Tiendas • ${route.direction || 'Ruta Nacional'}`}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {!route.isSplit && (
+                                    <div className="text-right relative z-10">
+                                      <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Total Ruta</p>
+                                      <p className="text-2xl font-black text-white">{Math.round(route.totalKm).toLocaleString()} <span className="text-base font-normal text-slate-500">KM</span></p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Tabla de Tiendas - Más Legible */}
+                                <div className="p-4">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider text-[10px]">
+                                        <th className="py-3 pl-6 text-left w-12 font-bold">#</th>
+                                        <th className="py-3 text-left font-bold">Punto de Venta</th>
+                                        <th className="py-3 text-left font-bold">Ubicación / Ciudad</th>
+                                        <th className="py-3 px-6 text-right font-bold">ID</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                      {route.stops.map((stop: any, sIdx: number) => (
+                                        <tr key={sIdx} className="hover:bg-blue-50/50 transition-colors text-[11px] group">
+                                          <td className="py-3 pl-6 text-slate-400 font-bold font-mono group-hover:text-blue-500">
+                                            {(route.startIndex !== undefined ? route.startIndex : 0) + sIdx + 1}
+                                          </td>
+                                          <td className="py-3 font-bold text-slate-700 uppercase group-hover:text-slate-900">{stop.name_sitio}</td>
+                                          <td className="py-3 text-slate-500 font-medium uppercase">{stop.city || stop.municipio || stop.estado}</td>
+                                          <td className="py-3 px-6 text-right text-slate-400 font-mono text-[10px] bg-slate-50/50">{stop.site_id || '-'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                {route.isSplit && (
+                                  <div className="bg-amber-50 px-6 py-2 text-[9px] font-bold text-amber-600 uppercase tracking-widest text-center border-t border-amber-100">
+                                    Continúa en siguiente página...
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Footer Página */}
+                        <div className="bg-slate-50 p-6 border-t border-slate-200 mt-auto">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[9px] text-slate-400 uppercase font-black tracking-[0.2em]">Target Instalaciones POP • Confidential</p>
+                            <p className="text-[10px] font-black text-[#003399]">PÁGINA {pageIndex + 2} DE {pdfPages.length + 2}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* --- PÁGINA FINAL: FIRMAS --- */}
+                    <div className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-20 font-sans relative flex flex-col justify-between border border-gray-100">
+                      <div className="flex-1 flex flex-col justify-center">
+                        <div className="flex items-center justify-center mb-16">
+                          <img src={targetLogo} className="h-32 object-contain" alt="Target" />
+                        </div>
+
+                        <div className="text-center max-w-2xl mx-auto mb-20">
+                          <h2 className="text-3xl font-black text-[#0f172a] uppercase tracking-tighter mb-8">Autorización de Proyecto</h2>
+                          <div className="w-20 h-1 bg-[#CC0000] mx-auto mb-8"></div>
+                          <p className="text-slate-500 text-sm leading-8 font-medium">
+                            Al firmar este documento, el cliente confirma la aceptación de la propuesta económica y los términos de servicio.
+                            La ejecución del proyecto <strong className="text-slate-900">"{projectName}"</strong> se programará inmediatamente tras la confirmación.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-24 px-8">
+                          <div className="border-t-2 border-slate-900 pt-8 text-center">
+                            <p className="text-sm font-black uppercase text-slate-900 mb-2">Target Instalaciones POP</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gerencia de Operaciones</p>
+                          </div>
+                          <div className="border-t-2 border-slate-900 pt-8 text-center">
+                            <p className="text-sm font-black uppercase text-slate-900 mb-2">{projectName}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Firma Autorizada</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <p className="text-[9px] text-slate-300 uppercase font-black tracking-[0.5em] mb-4">Powered by OptiFlot™ AI Engine</p>
+                        <p className="text-xs font-black text-[#003399] uppercase">PÁGINA FINAL</p>
+                      </div>
                     </div>
-                  </div>
-                </div>
-              ))}
+                  </>
+                );
+              })()}
+            </div>
 
-              {/* --- PÁGINA FINAL: FIRMAS --- */}
-              <div className="pdf-page w-[800px] min-h-[1123px] bg-white text-slate-900 p-16 font-sans relative flex flex-col justify-between border border-gray-200">
-                <div>
-                  <div className="flex items-center justify-center mb-20 pt-10">
-                    <img src={targetLogo} className="h-24 opacity-80" alt="" />
-                  </div>
+            {/* --- NUEVO TEMPLATE: PROPUESTA EJECUTIVA (HIGH IMPACT) --- */}
+            <div id="pdf-executive-container" className="fixed left-[-9999px] top-0">
+              {/* Página 1: Portada de Impacto */}
+              <div className="pdf-page-exec w-[800px] min-h-[1123px] bg-[#0f172a] text-white p-0 font-sans relative flex flex-col overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-[600px] bg-gradient-to-b from-blue-900/20 to-transparent"></div>
+                <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-600/20 rounded-full blur-[100px] translate-x-1/2 -translate-y-1/2"></div>
 
-                  <div className="text-center max-w-2xl mx-auto mb-20">
-                    <h2 className="text-3xl font-black text-[#003399] uppercase tracking-tighter mb-6">Autorización de Proyecto</h2>
-                    <p className="text-slate-500 text-sm leading-relaxed">
-                      Al firmar este documento, el cliente acepta los términos y condiciones de servicio estipulados en el Contrato Marco de Prestación de Servicios Logísticos. La ejecución del proyecto comenzará 48 horas después de la recepción del anticipo pactado.
+                <div className="relative z-10 p-24 h-full flex flex-col justify-between">
+                  <div>
+                    <img src={targetLogo} className="h-40 brightness-0 invert opacity-100 mb-16" alt="Target Logo" />
+                    <p className="text-xl font-bold text-blue-400 uppercase tracking-[0.4em] mb-6">Propuesta Comercial</p>
+                    <h1 className="text-7xl font-black uppercase leading-[0.9] tracking-tighter mb-4">
+                      {projectName || 'Proyecto Nacional'}
+                    </h1>
+                    <div className="w-24 h-3 bg-red-600 mt-8 mb-12"></div>
+                    <p className="text-2xl text-slate-400 font-light max-w-lg leading-relaxed">
+                      Estrategia integral de despliegue y logística para cobertura nacional de puntos de venta.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-20 px-10">
-                    <div className="border-t-2 border-slate-900 pt-6 text-center">
-                      <p className="text-sm font-black uppercase text-slate-900 mb-1">Target Instalaciones POP</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gerencia de Operaciones</p>
+                  <div>
+                    <div className="border border-white/10 bg-white/5 backdrop-blur-sm p-10 rounded-3xl">
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2">Inversión Total Estimada</p>
+                      <p className="text-8xl font-black tracking-tighter text-white">
+                        <span className="text-4xl align-top opacity-50">$</span>{Math.round(quotationData.totalProjectValue).toLocaleString()}
+                      </p>
+                      <p className="text-right text-xs font-bold text-emerald-400 uppercase tracking-widest mt-4">IVA Incluido • Validez 15 Días</p>
                     </div>
-                    <div className="border-t-2 border-slate-900 pt-6 text-center">
-                      <p className="text-sm font-black uppercase text-slate-900 mb-1">Cliente Autorizado</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nombre y Firma</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Página 2: Resumen Ejecutivo y Firmas */}
+              <div className="pdf-page-exec w-[800px] min-h-[1123px] bg-white text-slate-900 p-20 font-sans relative flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between border-b-4 border-slate-900 pb-8 mb-16">
+                    <h2 className="text-4xl font-black uppercase tracking-tighter">Resumen de Inversión</h2>
+                    <img src={targetLogo} className="h-12 grayscale" alt="" />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-12 mb-16">
+                    <div className="bg-slate-50 p-10 rounded-3xl">
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Alcance</p>
+                      <div className="space-y-6">
+                        <div>
+                          <p className="text-4xl font-black text-slate-900">{sites.length}</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase">Puntos de Venta</p>
+                        </div>
+                        <div>
+                          <p className="text-4xl font-black text-slate-900">{optimizedRoutes.length}</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase">Rutas Logísticas</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 p-10 rounded-3xl">
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Métricas</p>
+                      <div className="space-y-6">
+                        <div>
+                          <p className="text-4xl font-black text-blue-600">{Math.round(quotationData.totalKm).toLocaleString()} km</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase">Recorrido Total</p>
+                        </div>
+                        <div>
+                          <p className="text-4xl font-black text-emerald-600">${Math.round(quotationData.fuelCost).toLocaleString()}</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase">Víaticos y Operación</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center py-4 border-b border-slate-100">
+                      <p className="text-lg font-bold text-slate-600 uppercase">Costo Operativo Base</p>
+                      <p className="text-xl font-bold text-slate-900">${Math.round(quotationData.subtotal).toLocaleString()}</p>
+                    </div>
+                    <div className="flex justify-between items-center py-4 border-b border-slate-100">
+                      <p className="text-lg font-bold text-slate-600 uppercase">Gestión y Logística</p>
+                      <p className="text-xl font-bold text-slate-900">${Math.round(quotationData.margin).toLocaleString()}</p>
+                    </div>
+                    <div className="flex justify-between items-center py-8 border-t-2 border-slate-900 mt-4">
+                      <p className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Total Proyecto</p>
+                      <p className="text-5xl font-black text-blue-600 tracking-tighter">${Math.round(quotationData.totalProjectValue).toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-center border-t border-slate-200 pt-8">
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Generado automáticamente por la plataforma de optimización</p>
-                  <p className="text-[9px] text-[#003399] font-black mt-1">iamanos.com © 2026</p>
-                  <p className="text-xs font-black text-[#003399] mt-4">PÁGINA {Math.ceil(optimizedRoutes.length / 2) + 2} DE {Math.ceil(optimizedRoutes.length / 2) + 2}</p>
+                <div className="mt-20">
+                  <p className="text-center text-sm text-slate-500 mb-12 max-w-xl mx-auto leading-relaxed">
+                    Esta propuesta representa un compromiso formal de servicio por parte de Target Instalaciones POP.
+                  </p>
+                  <div className="grid grid-cols-2 gap-20">
+                    <div className="text-center">
+                      <div className="h-px bg-slate-300 mb-4 w-3/4 mx-auto"></div>
+                      <p className="text-xs font-black uppercase text-slate-900">Target Instalaciones POP</p>
+                    </div>
+                    <div className="text-center">
+                      <div className="h-px bg-slate-300 mb-4 w-3/4 mx-auto"></div>
+                      <p className="text-xs font-black uppercase text-slate-900">Cliente / Autorización</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-
             </div>
-
-
 
           </div>
         </div>

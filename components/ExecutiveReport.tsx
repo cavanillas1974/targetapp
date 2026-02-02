@@ -81,7 +81,7 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ routes, sites, config
                     { label: 'Total Rutas', value: totalRoutes, unit: 'unidades', color: 'blue' },
                     { label: 'Tiendas Visitadas', value: totalStops, unit: 'puntos', color: 'emerald' },
                     { label: 'Distancia Total', value: `${Math.round(totalKm).toLocaleString()} KM`, unit: 'recorrido', color: 'amber' },
-                    { label: 'Costo Campaña Est.', value: `$${Math.round(totalKm * 3.5 + totalRoutes * 250).toLocaleString()}`, unit: 'pesos mxn', color: 'rose' },
+                    { label: 'Costo Campaña Est.', value: `$${Math.round(totalKm * 15 + totalRoutes * 2000).toLocaleString()}`, unit: 'pesos mxn', color: 'rose' },
                 ].map((kpi, i) => (
                     <div key={i} className={`${cardClass} p-10 rounded-[3rem] border relative overflow-hidden group`}>
                         <div className={`absolute top-0 right-0 w-32 h-32 bg-${kpi.color}-500/5 blur-3xl -mr-16 -mt-16`}></div>

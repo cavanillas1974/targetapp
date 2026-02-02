@@ -212,174 +212,155 @@ export const MasterScheduleGantt: React.FC<MasterScheduleGanttProps> = ({
                 </div>
             </div>
 
-            {/* GANTT View */}
+            {/* GANTT View - Tactical Operation Stream */}
             {viewMode === 'GANTT' && (
-                <div className={`${isLightMode ? 'bg-white border-slate-200' : 'bg-slate-900/40 border-white/5'} rounded-[3rem] border overflow-hidden`}>
-                    {/* Date Header */}
-                    <div className={`flex border-b ${isLightMode ? 'border-slate-100 bg-slate-50' : 'border-white/5 bg-slate-900/60'}`}>
-                        <div className={`w-72 shrink-0 p-6 border-r ${isLightMode ? 'border-slate-100' : 'border-white/5'}`}>
-                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Ruta / Corredor</span>
+                <div className={`${isLightMode ? 'bg-white border-slate-200' : 'bg-[#0B1121] border-white/5'} rounded-[2.5rem] border shadow-2xl overflow-hidden relative`}>
+
+                    {/* Floating Legend */}
+                    <div className="absolute top-6 right-8 z-20 flex gap-4 text-[9px] font-black uppercase tracking-widest bg-black/20 backdrop-blur-md px-4 py-2 rounded-full border border-white/5">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                            <span>Operación Activa</span>
                         </div>
-                        <div className="flex-1 flex overflow-x-auto custom-scrollbar">
-                            {dateRange.map((date, i) => (
-                                <div
-                                    key={date}
-                                    className={`min-w-[80px] flex-1 p-3 text-center border-r ${isLightMode ? 'border-slate-100' : 'border-white/5'} ${isWeekend(date) ? (isLightMode ? 'bg-amber-50' : 'bg-amber-500/5') : ''}`}
-                                >
-                                    <p className={`text-[8px] font-black uppercase tracking-widest ${isWeekend(date) ? 'text-amber-500' : 'text-slate-500'}`}>
-                                        {getDayOfWeek(date)}
-                                    </p>
-                                    <p className={`text-sm font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                                        {formatDate(date).split(' ')[0]}
-                                    </p>
-                                    <p className="text-[8px] text-slate-500 font-bold">
-                                        {formatDate(date).split(' ')[1]}
-                                    </p>
-                                </div>
-                            ))}
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-amber-500"></div>
+                            <span>Hotel / Pernocta Logic</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs">🚗</span>
+                            <span>Tránsito Puro</span>
                         </div>
                     </div>
 
-                    {/* Route Rows */}
-                    <div className="divide-y divide-white/5">
-                        {routes.map((route, routeIdx) => {
-                            const routeDays = route.scheduledDays || [];
-                            const routeDates = routeDays.map(d => d.date);
+                    <div className="overflow-auto custom-scrollbar max-h-[800px] relative">
+                        {/* THE MATRIX */}
+                        <div className="min-w-max">
+                            {/* Header Row */}
+                            <div className="flex sticky top-0 z-10 bg-[#0f172a] shadow-lg border-b border-white/5">
+                                <div className="sticky left-0 z-20 w-80 p-6 bg-[#0f172a] border-r border-white/5 flex items-center shadow-[4px_0_24px_rgba(0,0,0,0.5)]">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Unidad Operativa</span>
+                                </div>
+                                {dateRange.map((date, i) => (
+                                    <div
+                                        key={date}
+                                        className={`w-32 py-4 text-center border-r border-white/5 flex flex-col justify-center relative group ${isWeekend(date) ? 'bg-amber-500/5' : ''}`}
+                                    >
+                                        <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${isWeekend(date) ? 'text-amber-500' : 'text-slate-500'}`}>
+                                            {getDayOfWeek(date)}
+                                        </p>
+                                        <p className="text-xl font-black text-white leading-none">
+                                            {formatDate(date).split(' ')[0]}
+                                        </p>
 
-                            return (
-                                <div
-                                    key={route.id}
-                                    className={`flex group transition-all duration-300 ${selectedRoute === route.id
-                                        ? (isLightMode ? 'bg-blue-50' : 'bg-blue-500/10')
-                                        : 'hover:bg-white/[0.02]'
-                                        }`}
-                                    onClick={() => setSelectedRoute(selectedRoute === route.id ? null : route.id)}
-                                >
-                                    {/* Route Label */}
-                                    <div className={`w-72 shrink-0 p-5 border-r ${isLightMode ? 'border-slate-100' : 'border-white/5'} cursor-pointer`}>
-                                        <div className="flex items-center gap-4">
+                                        {/* Date Indicator Line */}
+                                        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-blue-500/0 group-hover:bg-blue-500/50 transition-all"></div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Data Rows */}
+                            <div className="divide-y divide-white/5">
+                                {routes.map((route) => {
+                                    const routeDays = route.scheduledDays || [];
+                                    const routeDates = routeDays.map(d => d.date);
+
+                                    return (
+                                        <div key={route.id} className="flex group/row hover:bg-white/[0.02] transition-colors relative">
+
+                                            {/* Sticky Route Name Column */}
                                             <div
-                                                className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-sm shadow-lg"
-                                                style={{ backgroundColor: route.color }}
+                                                className="sticky left-0 z-10 w-80 p-5 bg-[#0B1121] border-r border-white/5 flex items-center gap-4 shadow-[4px_0_24px_rgba(0,0,0,0.3)] cursor-pointer group-hover/row:bg-[#0f172a] transition-colors"
+                                                onClick={() => setSelectedRoute(selectedRoute === route.id ? null : route.id)}
                                             >
-                                                {route.id}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-black uppercase tracking-tight truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
-                                                    {route.corridorName || route.driverName}
-                                                </p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${isLightMode ? 'bg-slate-100 text-slate-600' : 'bg-white/10 text-slate-400'}`}>
-                                                        {route.direction || route.base}
-                                                    </span>
-                                                    <span className="text-[9px] text-slate-500 font-bold">
-                                                        {route.stops.length} tiendas
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Gantt Bar */}
-                                    <div className="flex-1 flex overflow-x-auto">
-                                        {dateRange.map((date) => {
-                                            const dayInfo = routeDays.find(d => d.date === date);
-                                            const hasActivity = routeDates.includes(date);
-                                            const isFirstDay = routeDates[0] === date;
-                                            const isLastDay = routeDates[routeDates.length - 1] === date;
-                                            const isHovered = hoveredDay?.routeId === route.id && hoveredDay?.dayNum === dayInfo?.dayNumber;
-
-                                            return (
                                                 <div
-                                                    key={date}
-                                                    className={`min-w-[80px] flex-1 p-2 border-r ${isLightMode ? 'border-slate-100' : 'border-white/5'} ${isWeekend(date) ? (isLightMode ? 'bg-amber-50/50' : 'bg-amber-500/5') : ''} relative`}
-                                                    onMouseEnter={() => dayInfo && setHoveredDay({ routeId: route.id, dayNum: dayInfo.dayNumber })}
-                                                    onMouseLeave={() => setHoveredDay(null)}
+                                                    className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-lg transform group-hover/row:scale-110 transition-transform duration-300"
+                                                    style={{ backgroundColor: route.color, boxShadow: `0 0 20px ${route.color}40` }}
                                                 >
-                                                    {hasActivity && dayInfo && (
-                                                        <>
-                                                            {/* Activity Bar */}
-                                                            <div
-                                                                className={`min-h-[2.5rem] py-1 px-0.5 rounded-lg flex flex-col items-center justify-center transition-all duration-300 cursor-pointer overflow-hidden ${isHovered ? 'scale-110 z-20 shadow-xl' : 'z-10'
-                                                                    }`}
-                                                                style={{
-                                                                    backgroundColor: route.color,
-                                                                    borderRadius: isFirstDay ? '0.6rem 0.3rem 0.3rem 0.6rem' : isLastDay ? '0.3rem 0.6rem 0.6rem 0.3rem' : '0.3rem'
-                                                                }}
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    onViewDay?.(route, dayInfo);
-                                                                }}
-                                                            >
-                                                                {dayInfo.stores.map((s: any, idx: number) => (
-                                                                    <span key={idx} className="text-white text-[6.5px] font-black leading-tight text-center uppercase tracking-tight truncate max-w-full w-full px-1">
-                                                                        {s.name_sitio || s.name || `Tienda ${idx + 1}`}
-                                                                    </span>
-                                                                ))}
-                                                                {dayInfo.overnightLocation && (
-                                                                    <span className="text-[6px] mt-0.5 opacity-80">🏨</span>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Overnight Indicator */}
-                                                            {dayInfo.overnightLocation && (
-                                                                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2">
-                                                                    <div className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center text-[8px] shadow-lg border-2 border-white dark:border-slate-900">
-                                                                        🏨
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {/* Hover Tooltip */}
-                                                            {isHovered && (
-                                                                <div className={`absolute z-50 bottom-full left-1/2 transform -translate-x-1/2 mb-2 ${isLightMode ? 'bg-white' : 'bg-slate-800'} rounded-2xl p-4 shadow-2xl border ${isLightMode ? 'border-slate-200' : 'border-white/10'} min-w-[200px]`}>
-                                                                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-2">Día {dayInfo.dayNumber}</p>
-                                                                    <div className="space-y-2">
-                                                                        <div className="flex justify-between">
-                                                                            <span className="text-[10px] text-slate-500">Tiendas:</span>
-                                                                            <span className={`text-[10px] font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{dayInfo.stores.length}</span>
-                                                                        </div>
-                                                                        <div className="flex justify-between">
-                                                                            <span className="text-[10px] text-slate-500">KM:</span>
-                                                                            <span className={`text-[10px] font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{dayInfo.kmTotal}</span>
-                                                                        </div>
-                                                                        <div className="flex justify-between">
-                                                                            <span className="text-[10px] text-slate-500">Tiempo:</span>
-                                                                            <span className={`text-[10px] font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{Math.round(dayInfo.minutesTotal / 60)}h</span>
-                                                                        </div>
-                                                                        {dayInfo.overnightLocation && (
-                                                                            <div className="pt-2 border-t border-white/10">
-                                                                                <p className="text-[9px] text-amber-500 font-bold">🏨 Pernocta: {dayInfo.overnightLocation.name}</p>
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-3 h-3 bg-inherit border-r border-b border-inherit"></div>
-                                                                </div>
-                                                            )}
-                                                        </>
-                                                    )}
+                                                    {route.id}
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-black text-white uppercase tracking-tight truncate">
+                                                        {route.corridorName || route.driverName}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className="text-[9px] text-slate-400 uppercase font-bold tracking-wider">{route.stops.length} Tiendas</span>
+                                                        <span className="w-1 h-1 bg-slate-600 rounded-full"></span>
+                                                        <span className="text-[9px] text-blue-400 uppercase font-bold tracking-wider">{Math.round(route.totalKm).toLocaleString()} km</span>
+                                                    </div>
+                                                </div>
 
-                    {/* Legend */}
-                    <div className={`p-6 border-t ${isLightMode ? 'border-slate-100 bg-slate-50' : 'border-white/5 bg-slate-900/60'} flex items-center justify-center gap-8`}>
-                        <div className="flex items-center gap-2">
-                            <div className="w-6 h-4 bg-blue-500 rounded"></div>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Día Activo</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center text-[8px]">🏨</div>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Pernocta</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-6 h-4 bg-amber-500/20 rounded border border-amber-500/30"></div>
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Fin de Semana</span>
+                                                {/* Active Indicator Arrow */}
+                                                {selectedRoute === route.id && (
+                                                    <div className="absolute right-4 text-blue-500">
+                                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M9 18l6-6-6-6" /></svg>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Cells Grid */}
+                                            {dateRange.map((date) => {
+                                                const dayInfo = routeDays.find(d => d.date === date);
+                                                const isActive = !!dayInfo;
+                                                const isOvernight = !!dayInfo?.overnightLocation;
+
+                                                return (
+                                                    <div
+                                                        key={date}
+                                                        className={`w-32 min-h-[100px] border-r border-white/5 relative p-2 flex flex-col justify-center transition-all ${isActive ? 'bg-white/[0.01]' : ''} ${selectedRoute === route.id ? 'bg-blue-500/5' : ''}`}
+                                                    >
+                                                        {/* Connection Line Background */}
+                                                        {isActive && (
+                                                            <div className="absolute top-1/2 left-0 w-full h-px bg-white/10 z-0"></div>
+                                                        )}
+
+                                                        {isActive && dayInfo && (
+                                                            <div
+                                                                className="relative z-10 w-full bg-[#1e293b] border border-white/10 rounded-xl p-3 shadow-xl hover:scale-105 hover:border-blue-500/50 hover:bg-[#0f172a] transition-all cursor-pointer group/cell overflow-hidden"
+                                                                onClick={() => onViewDay?.(route, dayInfo)}
+                                                            >
+                                                                {/* Accent Bar */}
+                                                                <div className="absolute top-0 left-0 w-1 h-full" style={{ backgroundColor: route.color }}></div>
+
+                                                                {/* Cell Content */}
+                                                                <div className="pl-2">
+                                                                    <div className="flex justify-between items-start mb-2">
+                                                                        <span className="text-[10px] font-black text-white">{dayInfo.stores.length} SITIOS</span>
+                                                                        {isOvernight && <span className="text-xs" title="Pernocta">🏨</span>}
+                                                                    </div>
+
+                                                                    {/* Mini Progress Bar */}
+                                                                    <div className="w-full h-1 bg-slate-700 rounded-full mb-2 overflow-hidden">
+                                                                        <div className="h-full bg-blue-500 w-full opacity-80"></div>
+                                                                    </div>
+
+                                                                    <p className="text-[8px] text-slate-400 font-mono truncate">
+                                                                        {dayInfo.kmTotal} km
+                                                                    </p>
+                                                                </div>
+
+                                                                {/* Hover Tooltip (Portal-like) */}
+                                                                <div className="absolute opacity-0 group-hover/cell:opacity-100 transition-opacity inset-0 bg-black/90 flex flex-col items-center justify-center text-center p-2 backdrop-blur-sm z-20">
+                                                                    <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest mb-1">DETALLE</p>
+                                                                    <p className="text-[10px] text-white font-bold mb-1">{dayInfo.stores.length} Tiendas</p>
+                                                                    <p className="text-[8px] text-slate-400 uppercase leading-tight">
+                                                                        {dayInfo.stores[0]?.city || 'En ruta...'}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {!isActive && isWeekend(date) && (
+                                                            <div className="w-full h-full flex items-center justify-center opacity-10">
+                                                                <div className="w-1 h-1 bg-amber-500 rounded-full"></div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -523,7 +504,27 @@ export const MasterScheduleGantt: React.FC<MasterScheduleGanttProps> = ({
                                                 </span>
                                                 {day.overnightLocation && <span className="text-sm">🏨</span>}
                                             </div>
-                                            <p className={`text-lg font-black ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{day.stores.length} tiendas</p>
+                                            <div className="space-y-2 mb-2 min-h-[3rem]">
+                                                {day.stores.slice(0, 3).map((s: any, i: number) => (
+                                                    <div key={i} className="leading-tight">
+                                                        <p className={`text-xs font-black uppercase tracking-tight truncate ${isLightMode ? 'text-slate-900' : 'text-white'}`} title={s.name_sitio || s.name}>
+                                                            {s.name_sitio || s.name || `Tienda ${i + 1}`}
+                                                        </p>
+                                                        {(s.state || s.estado || s.direccion_normalizada) && (
+                                                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                                                                <span className="opacity-50">📍</span>
+                                                                {s.state || s.estado || (s.direccion_normalizada ? s.direccion_normalizada.split(',').slice(-2, -1)[0]?.trim() : 'MX')}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                                {day.stores.length > 3 && (
+                                                    <p className="text-[9px] text-slate-400 italic">...y {day.stores.length - 3} más</p>
+                                                )}
+                                                {day.stores.length === 0 && (
+                                                    <p className="text-[10px] text-slate-400 italic">Solo Tránsito</p>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] text-slate-500 font-bold mt-1">{formatDate(day.date)}</p>
                                             <p className="text-[9px] text-slate-500 mt-1">{day.kmTotal} km • {Math.round(day.minutesTotal / 60)}h</p>
                                             {day.overnightLocation && (

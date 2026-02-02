@@ -32,14 +32,20 @@ const ChatWindow: React.FC = () => {
       if (activeId) {
         const savedProject = localStorage.getItem(`iamanos_project_${activeId}`);
         if (savedProject) {
-          projectContext = JSON.parse(savedProject);
+          try {
+            projectContext = JSON.parse(savedProject);
+          } catch (e) {
+            console.warn("Context load error ignored:", e);
+          }
         }
       }
 
       const response = await geminiService.getChatResponse(messages, userMsg, projectContext);
       setMessages(prev => [...prev, { role: 'model', text: response }]);
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', text: 'Sistema temporalmente fuera de línea. Por favor reintente en unos momentos.' }]);
+    } catch (error: any) {
+      console.error("Chat Error:", error);
+      const errorMessage = error?.message || 'Error desconocido de conexión.';
+      setMessages(prev => [...prev, { role: 'model', text: `ERROR DEL SISTEMA: ${errorMessage}\n\nVerifica tu API Key o conexión.` }]);
     } finally {
       setIsLoading(false);
     }
