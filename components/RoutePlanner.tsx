@@ -2100,94 +2100,138 @@ const RoutePlanner: React.FC = () => {
                         </div>
 
                         {/* Eje de RUTAS (X) y FECHAS (Y) - Matriz de Despliegue Vertical */}
-                        <div className="border border-white/5 rounded-[2rem] overflow-hidden bg-black/20 backdrop-blur-3xl">
-                          <div className="overflow-x-auto custom-scrollbar">
-                            <div className="min-w-[800px]">
-                              {/* Header: Rutas (Sticky Top) */}
-                              <div className="flex bg-white/5 border-b border-white/10 p-4 sticky top-0 z-10 backdrop-blur-md">
-                                <div className="w-32 shrink-0 flex items-center">
-                                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">CALENDARIO</span>
-                                </div>
-                                <div className="flex-1 flex gap-2">
-                                  {optimizedRoutes.map((route, rIdx) => (
-                                    <div key={route.id} className="flex-1 min-w-[80px] flex flex-col items-center gap-1 group">
-                                      <div className="w-2 h-2 rounded-full mb-1" style={{ backgroundColor: route.color }}></div>
-                                      <span className="text-[9px] font-black text-white/70 group-hover:text-white transition-colors">R-{String(route.id).padStart(2, '0')}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
+                        {/* Eje de RUTAS (X) y FECHAS (Y) - Matriz de Despliegue Vertical (SCI-FI STICKY GRID) */}
+                        <div className="relative rounded-[2.5rem] overflow-hidden border border-white/10 bg-[#0B1121] shadow-2xl ring-1 ring-white/5 group/container">
 
-                              {/* Body: Fechas con Scroll Vertical */}
-                              <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                          {/* Decorative Elements */}
+                          <div className="absolute top-0 left-0 w-32 h-32 bg-blue-500/10 blur-[50px] pointer-events-none"></div>
+                          <div className="absolute bottom-0 right-0 w-64 h-64 bg-emerald-500/5 blur-[80px] pointer-events-none"></div>
+
+                          {/* SCROLL CONTAINER */}
+                          <div className="overflow-auto custom-scrollbar max-h-[600px] relative">
+                            <table className="w-full border-collapse text-left relative">
+
+                              {/* --- HEADER ROW (Sticky Top) --- */}
+                              <thead className="bg-[#0f172a] shadow-xl text-white sticky top-0 z-30">
+                                <tr>
+                                  {/* CORNER CELL (Sticky Left & Top) */}
+                                  <th className="sticky left-0 top-0 z-40 bg-[#0f172a] p-4 min-w-[140px] border-b border-r border-white/10 shadow-[4px_4px_16px_rgba(0,0,0,0.5)]">
+                                    <div className="flex flex-col gap-1">
+                                      <span className="text-[8px] font-black text-blue-500 uppercase tracking-[0.2em]">AGRUPACIÓN</span>
+                                      <div className="h-px w-full bg-gradient-to-r from-blue-500/50 to-transparent my-1"></div>
+                                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-[0.2em] text-right">CRONOGRAMA</span>
+                                    </div>
+                                  </th>
+
+                                  {/* ROUTE HEADERS */}
+                                  {optimizedRoutes.map((route) => (
+                                    <th key={route.id} className="p-3 border-b border-r border-white/5 min-w-[130px] relative group/col">
+                                      <div className="flex flex-col items-center gap-2">
+                                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-black text-white shadow-lg relative overflow-hidden" style={{ background: route.color }}>
+                                          {/* Shine Effect */}
+                                          <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent"></div>
+                                          {String(route.id).replace(/\D/g, '')}
+                                        </div>
+                                        <div className="text-center">
+                                          <div className="text-[9px] font-black text-white uppercase tracking-tight leading-tight">{route.driverName || 'Ruta'}</div>
+                                          <div className="text-[8px] font-bold text-slate-500">{route.stops.length} Stops</div>
+                                        </div>
+                                      </div>
+                                      {/* Col Highlight on Hover */}
+                                      <div className="absolute inset-x-0 bottom-0 h-0.5 bg-blue-500/0 group-hover/col:bg-blue-500/50 transition-all"></div>
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+
+                              {/* --- BODY --- */}
+                              <tbody className="divide-y divide-white/[0.02]">
                                 {projectDates.map((dateStr, dIdx) => {
                                   const d = new Date(dateStr + 'T00:00:00');
-                                  const dayName = d.toLocaleDateString('es-MX', { weekday: 'short' });
+                                  const dayName = d.toLocaleDateString('es-MX', { weekday: 'short' }).toUpperCase();
+                                  const dayNumber = d.getDate();
+                                  const monthName = d.toLocaleDateString('es-MX', { month: 'short' }).toUpperCase();
                                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
 
                                   return (
-                                    <div key={dateStr} className={`flex items-center p-4 border-b border-white/[0.02] hover:bg-white/[0.02] transition-colors ${isWeekend ? 'bg-orange-500/[0.02]' : ''}`}>
-                                      <div className="w-32 shrink-0">
-                                        <p className={`text-[10px] font-black uppercase tracking-tight ${isWeekend ? 'text-orange-500' : 'text-slate-400'}`}>
-                                          {dayName} <span className="text-slate-600 font-bold ml-1">•</span> {formatDateShort(dateStr)}
-                                        </p>
-                                      </div>
-                                      <div className="flex-1 flex gap-2 h-8 items-center">
-                                        {optimizedRoutes.map((route, rIdx) => {
-                                          const scheduledDay = route.scheduledDays?.find((sd: any) => sd.date === dateStr);
-                                          const isWorking = !!scheduledDay;
+                                    <tr key={dateStr} className={`group/row hover:bg-white/[0.02] transition-colors ${isWeekend ? 'bg-amber-500/[0.02]' : ''}`}>
 
-                                          // Fallback si no hay scheduledDays (fase previa)
-                                          const totalStops = route.stops.length;
-                                          const routeDays = Math.ceil(totalStops / config.stopsPerDayPerRoute);
-                                          const routeStartIdx = projectDates.indexOf(route.startDate || config.startDate);
-                                          const isEstimatedWorking = !route.scheduledDays && (dIdx >= routeStartIdx && dIdx < routeStartIdx + routeDays);
+                                      {/* DATE COLUMN (Sticky Left) */}
+                                      <td className={`sticky left-0 z-20 p-4 border-r border-white/10 shadow-[4px_0_16px_rgba(0,0,0,0.3)] backdrop-blur-md ${isLightMode ? 'bg-[#F8FAFC]' : 'bg-[#0B1121]'} group-hover/row:bg-[#11192b]`}>
+                                        <div className="flex items-center justify-between">
+                                          <div className={`flex flex-col items-center min-w-[30px] ${isWeekend ? 'opacity-100' : 'opacity-80'}`}>
+                                            <span className={`text-[9px] font-black uppercase tracking-wider ${isWeekend ? 'text-amber-500' : 'text-slate-500'}`}>{dayName}</span>
+                                            <span className={`text-xl font-black ${isWeekend ? 'text-amber-400' : (isLightMode ? 'text-slate-800' : 'text-white')}`}>{dayNumber}</span>
+                                            <span className="text-[8px] font-bold text-slate-600 uppercase">{monthName}</span>
+                                          </div>
+                                          {isWeekend && <span className="text-sm">🏖️</span>}
+                                        </div>
+                                      </td>
 
-                                          // Obtener nombres de tiendas para este día
-                                          const storeNames = scheduledDay?.stops?.map((s: any) => s.name_sitio).join(', ') || '';
+                                      {/* CELLS */}
+                                      {optimizedRoutes.map((route, rIdx) => {
+                                        const scheduledDay = route.scheduledDays?.find((sd: any) => sd.date === dateStr);
+                                        const isWorking = !!scheduledDay;
 
-                                          return (
-                                            <div key={route.id} className="flex-1 min-w-[80px] h-full flex items-center justify-center px-1">
-                                              {(isWorking || isEstimatedWorking) && (
-                                                <div
-                                                  className="w-full h-6 rounded-md shadow-lg transform transition-all hover:scale-[1.05] flex items-center justify-center group/pill relative px-2 overflow-hidden border border-white/10"
-                                                  style={{ background: routeColors[rIdx % routeColors.length] }}
-                                                  title={storeNames || 'Tiendas Programadas'}
-                                                >
-                                                  <div className="absolute inset-0 bg-gradient-to-tr from-black/30 to-transparent rounded-md"></div>
-                                                  <span className="relative z-10 text-[7px] font-black text-white uppercase tracking-tighter truncate max-w-full">
-                                                    {storeNames || (isEstimatedWorking ? 'ESTIMADO' : 'ACTIVA')}
-                                                  </span>
-                                                  <div className="absolute inset-0 bg-white/20 opacity-0 group-hover/pill:opacity-100 transition-opacity flex items-center justify-center">
-                                                    <span className="text-[6px] font-black text-white">DETALLES</span>
+                                        // Fallback Logic
+                                        const totalStops = route.stops.length;
+                                        const routeDaysCount = Math.ceil(totalStops / config.stopsPerDayPerRoute);
+                                        const routeStartDate = route.startDate || config.startDate;
+                                        const routeStartIdx = projectDates.indexOf(routeStartDate);
+
+                                        let isEstimatedActive = false;
+                                        if (!route.scheduledDays) {
+                                          isEstimatedActive = dIdx >= routeStartIdx && dIdx < (routeStartIdx + routeDaysCount);
+                                        }
+
+                                        const isActive = isWorking || isEstimatedActive;
+                                        const stopsCount = scheduledDay ? scheduledDay.stores.length : (isEstimatedActive ? Math.round(totalStops / routeDaysCount) : 0);
+                                        const kmCount = scheduledDay ? Math.round(scheduledDay.kmTotal) : (isEstimatedActive ? Math.round(route.totalKm / routeDaysCount) : 0);
+
+                                        return (
+                                          <td key={`${dateStr}-${route.id}`} className={`p-2 border-r border-white/[0.03] text-center w-[130px] h-[80px] relative transition-all duration-300 ${isActive ? 'bg-white/[0.01]' : ''}`}>
+                                            {isActive ? (
+                                              <div className="w-full h-full flex flex-col items-center justify-center p-2 rounded-xl border border-white/5 bg-[#172033] shadow-lg group hover:scale-105 hover:border-blue-500/50 hover:bg-[#1e293b] hover:z-10 transition-all cursor-pointer overflow-hidden relative">
+                                                {/* Status Dot */}
+                                                <div className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: route.color }}></div>
+
+                                                {/* Content */}
+                                                <div className="flex flex-col items-center gap-1 z-10">
+                                                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">OBJETIVO</span>
+                                                  <div className="flex items-baseline gap-1">
+                                                    <span className="text-xl font-black text-white leading-none">{stopsCount}</span>
+                                                    <span className="text-[9px] font-bold text-slate-500">TIENDAS</span>
                                                   </div>
+                                                  <div className="w-full h-1 bg-slate-700 rounded-full mt-1 overflow-hidden">
+                                                    <div className="h-full w-full" style={{ backgroundColor: route.color, opacity: 0.8 }}></div>
+                                                  </div>
+                                                  <span className="text-[8px] font-mono text-blue-400 mt-0.5">{kmCount} KM</span>
                                                 </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
+
+                                                {/* Hover Glow */}
+                                                <div className="absolute inset-0 bg-blue-500/0 group-hover:bg-blue-500/10 transition-colors pointer-events-none"></div>
+                                              </div>
+                                            ) : (
+                                              <div className="w-full h-full flex items-center justify-center">
+                                                <div className="w-1 h-1 rounded-full bg-slate-800"></div>
+                                              </div>
+                                            )}
+                                          </td>
+                                        );
+                                      })}
+
+                                    </tr>
                                   );
                                 })}
-                              </div>
+                              </tbody>
+                            </table>
+                          </div>
 
-                              {/* Footer Stats Matrix */}
-                              <div className="p-6 bg-white/[0.03] flex items-center justify-between">
-                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                  MODO: MATRIZ DE DESPLIEGUE EJECUTIVO
-                                </p>
-                                <div className="flex gap-4">
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                                    <span className="text-[9px] font-black text-slate-400">FASE OPERATIVA</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-slate-700"></div>
-                                    <span className="text-[9px] font-black text-slate-400">DISPONIBLE</span>
-                                  </div>
-                                </div>
-                              </div>
+                          {/* Footer Info */}
+                          <div className="bg-[#0f172a] p-3 text-center border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20 relative">
+                            <div className="flex items-center justify-center gap-6 text-[9px] font-black text-slate-500 uppercase tracking-widest">
+                              <span>🖱️ Scroll Doble Eje Habilitado</span>
+                              <span className="text-blue-500">↔ Desliza Horizontal y Verticalmente</span>
                             </div>
                           </div>
                         </div>
