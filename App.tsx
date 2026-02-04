@@ -61,6 +61,7 @@ const AppContent: React.FC = () => {
               <div className="flex items-center gap-3 bg-white/5 border border-white/5 px-4 py-2 rounded-2xl shadow-inner">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-xl shadow-emerald-500/50"></div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-300">Sync Master Activo</span>
+                <span className="text-[8px] text-slate-500 font-bold ml-2 border-l border-white/10 pl-2">iamanos.com / Development</span>
               </div>
             </div>
 

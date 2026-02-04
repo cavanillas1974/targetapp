@@ -114,24 +114,46 @@ export const geminiService = {
 
   async getChatResponse(history: { role: string, text: string }[], message: string, projectContext?: any) {
     try {
-      // Contexto manual
+      // Contexto manual enriquecido
       let contextStr = "";
       if (projectContext) {
-        contextStr = `[CONTEXTO: Proyecto "${projectContext.metadata?.name}"]`;
+        if (projectContext.contextSummary) {
+          contextStr = projectContext.contextSummary; // Usar el resumen pre-formateado si existe
+        } else {
+          // Fallback simple por si cambia la estructura
+          contextStr = `[CONTEXTO PROYECTO: ${JSON.stringify(projectContext, null, 2)}]`;
+        }
       }
 
       const model = getAI().getGenerativeModel({ model: "gemini-1.5-pro" });
 
+      // Transformar historial para API y limitar longitud para ahorrar tokens/evitar errores
+      const formattedHistory = history
+        .slice(-10) // Mantener solo los últimos 10 mensajes para contexto inmediato
+        .filter((_, index) => index > 0 || history[0].role === 'user') // Filtrar saludos iniciales si son system messages
+        .map(h => ({
+          role: h.role === 'user' ? 'user' : 'model',
+          parts: [{ text: h.text }]
+        }));
+
       const chat = model.startChat({
-        history: history
-          .filter((_, index) => index > 0 || history[0].role === 'user')
-          .map(h => ({
-            role: h.role === 'user' ? 'user' : 'model',
-            parts: [{ text: h.text }]
-          }))
+        history: formattedHistory
       });
 
-      const fullMessage = `${contextStr}\n\nPREGUNTA: ${message}`;
+      // Instrucción maestra para que actúe como experto logístico
+      const systemInstruction = `
+        ACTÚA COMO: Cerebro Logístico OptiFlot (Experto en logística, ruteo y análisis de datos).
+        
+        UTILIZA ESTE CONTEXTO EXCLUSIVO PARA RESPONDER (No inventes datos):
+        ${contextStr}
+        
+        INSTRUCCIONES:
+        1. Sé preciso con los números (tiendas, kilómetros, costos).
+        2. Si no tienes el dato exacto en el contexto, dilo honestamente.
+        3. Mantén un tono profesional, ejecutivo y estratégico.
+      `;
+
+      const fullMessage = `${systemInstruction}\n\nPREGUNTA USUARIO: ${message}`;
       const result = await chat.sendMessage(fullMessage);
       return result.response.text();
     } catch (e) {

@@ -71,6 +71,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
             <div className="min-w-0 animate-in fade-in duration-700">
               <p className="text-[10px] font-black text-white uppercase tracking-widest truncate">Sistema Activo</p>
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter truncate mt-0.5">V2.4.1 Premium</p>
+              <p className="text-[8px] text-blue-500/50 font-bold uppercase tracking-widest truncate mt-2">iamanos.com / Development</p>
             </div>
           )}
         </div>
