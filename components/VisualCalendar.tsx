@@ -1,5 +1,6 @@
 import React from 'react';
 import { SiteRecord } from '../types';
+import targetLogo from '../Images/logo.png';
 
 interface Route {
     id: string;
@@ -44,13 +45,12 @@ export const VisualCalendar: React.FC<VisualCalendarProps> = ({ routes, isLightM
             {/* Header Visual */}
             <div className="flex items-center justify-between">
                 <div>
-                    <div className="flex items-center gap-6 mb-4">
-                        <img src="./images/iamanos.png" alt="iamanos" className="h-10 w-auto" />
+                    <div className="flex flex-col gap-4 mb-4">
+                        <img src={targetLogo} alt="Client Logo" className="h-20 w-auto object-contain self-start drop-shadow-lg" />
                         <h2 className={`text-5xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>Cronograma <span className="text-blue-500">Master</span></h2>
                     </div>
                     <p className="text-slate-500 font-bold uppercase text-[10px] tracking-[0.4em] mt-2 flex items-center gap-3">
-                        <img src="./images/logo.png" alt="Target" className="h-4" />
-                        Visualización de Ejecución Operativa iamanos™ OptiFlot
+                        Visualización de Ejecución Operativa
                     </p>
                 </div>
 

@@ -1216,10 +1216,6 @@ const RoutePlanner: React.FC = () => {
                   </p>
                 </div>
                 <div className="h-12 w-px bg-white/10 mx-2"></div>
-                <div className="flex flex-col items-start gap-1">
-                  <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest leading-none">Powered by</p>
-                  <img src="./images/iamanos.png" alt="iamanos" className="h-6 w-auto opacity-40 grayscale" />
-                </div>
                 <div className="ml-6">
                   <button
                     onClick={() => {
@@ -3327,17 +3323,13 @@ const RoutePlanner: React.FC = () => {
             {/* Header de Cotización */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-12 mb-20 border-b border-white/5 pb-10">
               <div className="flex items-center gap-10">
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center gap-4">
-                    <img src="./images/logo.png" alt="Target" className="h-14 w-auto" />
+                <div className="flex flex-col gap-6">
+                  <div className="flex items-center gap-6">
+                    <img src={targetLogo} alt="Target" className="h-32 w-auto object-contain drop-shadow-[0_0_25px_rgba(255,255,255,0.6)]" />
                     <div className="flex flex-col">
-                      <span className="text-white text-[12px] font-black uppercase tracking-widest leading-none">Inversión Logística Target</span>
-                      <span className="text-emerald-500 text-[8px] font-black bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 uppercase tracking-[0.2em] mt-1">Sello de Autorización</span>
+                      <span className="text-white text-lg font-black uppercase tracking-widest leading-none">Inversión Logística Target</span>
+                      <span className="text-emerald-500 text-xs font-black bg-emerald-500/10 px-3 py-1 rounded border border-emerald-500/20 uppercase tracking-[0.2em] mt-2 self-start">Sello de Autorización</span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2 opacity-30 group-hover:opacity-100 transition-opacity">
-                    <p className="text-[7px] font-black text-slate-500 uppercase tracking-widest leading-none">Powered by</p>
-                    <img src="./images/iamanos.png" alt="iamanos" className="h-4 w-auto grayscale" />
                   </div>
                 </div>
                 <div className="h-16 w-px bg-white/10 hidden md:block"></div>

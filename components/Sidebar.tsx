@@ -3,6 +3,8 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { COLORS } from '../constants';
 
+import targetLogo from '../Images/logo.png';
+
 interface SidebarProps {
   isOpen: boolean;
   toggle: () => void;
@@ -20,17 +22,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggle }) => {
 
   return (
     <aside className={`${isOpen ? 'w-[280px]' : 'w-[100px]'} h-full bg-[#030712] border-r border-white/5 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] flex flex-col relative z-30`}>
-      <div className="p-8 flex items-center justify-between h-24">
+      <div className="p-8 flex items-center justify-center h-32">
         {isOpen ? (
-          <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-2 duration-700">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg p-1">
-              <img src="./images/iamanos.png" alt="Logo" className="w-full h-full object-contain" />
-            </div>
-            <img src="./images/iamanos.png" alt="iamanos" className="h-6 w-auto" />
+          <div className="animate-in fade-in slide-in-from-left-2 duration-700 flex flex-col items-center gap-2">
+            <img src={targetLogo} alt="Client Logo" className="h-24 w-auto object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.4)] hover:scale-105 transition-transform duration-500" />
           </div>
         ) : (
-          <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg mx-auto p-1">
-            <img src="./images/iamanos.png" alt="Logo" className="w-full h-full object-contain" />
+          <div className="w-12 h-12 flex items-center justify-center mx-auto">
+            <img src={targetLogo} alt="Logo" className="w-full h-full object-contain drop-shadow-lg" />
           </div>
         )}
       </div>

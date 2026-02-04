@@ -5,6 +5,7 @@ import {
     Cell, PieChart, Pie, AreaChart, Area
 } from 'recharts';
 import { COLORS } from '../constants';
+import targetLogo from '../Images/logo.png';
 
 interface ExecutiveReportProps {
     routes: any[];
@@ -59,15 +60,14 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ routes, sites, config
             <div className="flex justify-between items-end border-b border-blue-500/20 pb-10">
                 <div>
                     <div className="flex items-center gap-8 mb-6">
-                        <div className="w-32 h-32 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl p-4 overflow-hidden border border-blue-500/10">
-                            <img src="./images/logo.png" alt="Target Logo" className="w-full h-full object-contain scale-150" />
+                        <div className="w-40 h-40 bg-white rounded-[2.5rem] flex items-center justify-center shadow-2xl p-6 overflow-hidden border-2 border-blue-500/10">
+                            <img src={targetLogo} alt="Target Logo" className="w-full h-full object-contain scale-110 drop-shadow-2xl" />
                         </div>
                         <div className="flex flex-col gap-2">
-                            <img src="./images/iamanos.png" alt="iamanos" className="h-12 w-fit" />
-                            <div className="flex items-center gap-3">
-                                <img src="./images/logo.png" alt="Target" className="h-12" />
-                                <span className="text-blue-500 text-[10px] font-black bg-blue-500/10 px-3 py-1 rounded-lg border border-blue-500/20 not-italic w-fit">OptiFlot™ EXECUTIVE ENGINE</span>
-                            </div>
+                            <h2 className={`${textTitle} text-5xl font-black uppercase tracking-tighter`}>Informe Ejecutivo</h2>
+                            <span className="text-blue-500 text-xs font-black bg-blue-500/10 px-4 py-1.5 rounded-xl border border-blue-500/20 not-italic w-fit uppercase tracking-widest">
+                                Optimización de Rutas
+                            </span>
                         </div>
                     </div>
                     <p className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-500/60">Informe Operativo de Optimización Logística</p>
