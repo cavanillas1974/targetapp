@@ -246,7 +246,16 @@ const RoutePlanner: React.FC = () => {
       setProjectName(project.metadata?.name || 'Proyecto Sin Nombre');
 
       if (project.sites) setSites(project.sites);
-      if (project.config) setConfig(project.config);
+      if (project.sites) setSites(project.sites);
+      if (project.config) {
+        setConfig(prev => ({
+          ...prev,
+          ...project.config,
+          // Asegurar que las fechas existan, fallback a defaults si están indefinidas
+          startDate: project.config.startDate || prev.startDate,
+          endDate: project.config.endDate || prev.endDate
+        }));
+      }
       if (project.optimizedRoutes) setOptimizedRoutes(project.optimizedRoutes);
       if (project.evidences) setEvidences(project.evidences);
 
