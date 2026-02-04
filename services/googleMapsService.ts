@@ -11,9 +11,17 @@ const matrixCache: Record<string, { distance: number, duration: number }> = {};
 
 export const googleMapsService = {
     /**
-     * Obtiene coordenadas desde una dirección
+     * Obtiene coordenadas desde una dirección CON INFORMACIÓN DE PRECISIÓN
      */
-    async geocode(address: string): Promise<{ lat: number, lng: number, place_id?: string, formatted_address?: string, partial_match?: boolean } | null> {
+    async geocode(address: string): Promise<{
+        lat: number,
+        lng: number,
+        place_id?: string,
+        formatted_address?: string,
+        partial_match?: boolean,
+        location_type?: 'ROOFTOP' | 'RANGE_INTERPOLATED' | 'GEOMETRIC_CENTER' | 'APPROXIMATE',
+        precision_meters?: number
+    } | null> {
         const key = getApiKey();
         if (!key) {
             console.warn("Google Maps API Key no encontrada. USANDO MODO SIMULADO (AntiGravity Fallback).");
@@ -22,7 +30,9 @@ export const googleMapsService = {
                 lat: 19.4326 + (Math.random() - 0.5) * 2.0, // Radio amplio en México
                 lng: -99.1332 + (Math.random() - 0.5) * 2.0,
                 formatted_address: address + " (UBICACIÓN ESTIMADA / SIMULADA)",
-                partial_match: true
+                partial_match: true,
+                location_type: 'APPROXIMATE',
+                precision_meters: 1000
             };
         }
 
@@ -36,13 +46,43 @@ export const googleMapsService = {
 
             if (data.status === 'OK' && data.results.length > 0) {
                 const result = data.results[0];
+                const geometry = result.geometry;
+
+                // Calcular precisión estimada basada en location_type
+                let precision_meters = 100;
+                switch (geometry.location_type) {
+                    case 'ROOFTOP':
+                        precision_meters = 5;
+                        break;
+                    case 'RANGE_INTERPOLATED':
+                        precision_meters = 10;
+                        break;
+                    case 'GEOMETRIC_CENTER':
+                        precision_meters = 50;
+                        break;
+                    case 'APPROXIMATE':
+                    default:
+                        precision_meters = 100;
+                        break;
+                }
+
                 const location = {
                     lat: result.geometry.location.lat,
                     lng: result.geometry.location.lng,
                     place_id: result.place_id,
                     formatted_address: result.formatted_address,
-                    partial_match: result.partial_match === true
+                    partial_match: result.partial_match === true,
+                    location_type: geometry.location_type,
+                    precision_meters
                 };
+
+                // Log de precisión para debugging
+                if (precision_meters > 50) {
+                    console.warn(`⚠️ Baja precisión (±${precision_meters}m) para: ${address.substring(0, 50)}...`);
+                } else if (precision_meters <= 10) {
+                    console.log(`✅ Alta precisión (±${precision_meters}m): ${address.substring(0, 50)}...`);
+                }
+
                 geocodeCache[address] = location;
                 return location;
             }

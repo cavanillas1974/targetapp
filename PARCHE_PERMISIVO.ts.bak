@@ -1,0 +1,166 @@
+// 🔧 PARCHE CRÍTICO - Procesamiento Permisivo de Archivos
+// Este archivo contiene los fixes necesarios para RoutePlanner.tsx
+
+// ===============================================
+// 1. IMPORT ADICIONAL (agregar después de línea 33)
+// ===============================================
+import { projectDatabase } from '../services/projectDatabase';
+import { DataIntegrityChecker } from '../utils/dataIntegrityChecker';
+
+// ===============================================
+// 2. REEMPLAZAR loadProject COMPLETO (líneas ~227-262)
+// ===============================================
+const loadProject = async (id: string) => {
+    console.log(`🔄 Cargando proyecto: ${id}`);
+
+    try {
+        let project = await projectDatabase.loadProject(id);
+
+        if (!project) {
+            const saved = localStorage.getItem(`iamanos_project_${id}`);
+            if (saved) {
+                project = JSON.parse(saved.trim().startsWith('{') ? saved : LZString.decompressFromUTF16(saved) || '{}');
+                await projectDatabase.saveProject(project);
+            }
+        }
+
+        if (!project) {
+            alert(`Proyecto no encontrado: ${id}`);
+            return;
+        }
+
+        setActiveProjectId(id);
+        setProjectName(project.metadata?.name || 'Sin Nombre');
+        if (project.sites) setSites(project.sites);
+        if (project.config) setConfig(project.config);
+        if (project.optimizedRoutes) setOptimizedRoutes(project.optimizedRoutes);
+        if (project.evidences) setEvidences(project.evidences);
+
+        const targetStep = project.optimizedRoutes?.length > 0 ? 4 : (project.sites?.length > 0 ? 2 : 1);
+        setActiveStep(targetStep);
+
+        console.log(`✅ Proyecto cargado: ${project.sites?.length || 0} tiendas`);
+    } catch (e: any) {
+        console.error("Error cargando proyecto:", e);
+        alert(`Error al cargar proyecto: ${e.message}`);
+        setActiveStep(0);
+    }
+};
+
+// ===============================================
+// 3. REEMPLAZAR processFileRows - SOLO EL FINAL (líneas ~697-700)
+// Buscar donde dice: setSites(data);
+// ===============================================
+
+// REEMPLAZAR DESDE:
+//     });
+//     
+//     setSites(data);
+//     saveProject(data, [], [], config);
+//     setActiveStep(2);
+//   };
+
+// CON ESTO:
+    });
+
+// 🔧 PROCESAMIENTO PERMISIVO - Solo filtrar filas completamente vacías
+console.log(`📊 Archivo cargado: ${data.length} filas`);
+
+const validData = data.filter(site => {
+    // Aceptar TODAS las filas que tengan AL MENOS nombre O dirección
+    const hasContent = (site.name_sitio && site.name_sitio.trim()) ||
+        (site.direccion_completa && site.direccion_completa.trim() &&
+            site.direccion_completa !== 'DIRECCIÓN NO PROPORCIONADA');
+    return hasContent;
+});
+
+const removed = data.length - validData.length;
+if (removed > 0) {
+    console.warn(`⚠️ Ignoradas ${removed} filas vacías`);
+}
+
+console.log(`✅ Procesando ${validData.length} tiendas`);
+
+setSites(validData);
+saveProject(validData, [], [], config);
+setActiveStep(2);
+  };
+
+// ===============================================
+// 4. ARREGLAR quotationData para manejar NaN (línea ~380)
+// ===============================================
+
+const quotationData = useMemo(() => {
+    if (optimizedRoutes.length === 0) return null;
+
+    // ✅ ARREGLO: Validar que totalKm sea un número válido
+    const totalActualKm = optimizedRoutes.reduce((acc, r) => {
+        const km = parseFloat(r.totalKm) || 0;
+        return acc + (isNaN(km) ? 0 : km);
+    }, 0);
+
+    const quotedKm = totalActualKm || 0; // Fallback a 0 si es NaN
+
+    let totalRouteDays = 0;
+
+    optimizedRoutes.forEach(route => {
+        const validDates = route.stops
+            .map((s: any) => s.scheduled_date ? new Date(s.scheduled_date) : null)
+            .filter((d): d is Date => d !== null && !isNaN(d.getTime()));
+
+        if (validDates.length > 0) {
+            const minDate = new Date(Math.min(...validDates.map(d => d.getTime())));
+            const maxDate = new Date(Math.max(...validDates.map(d => d.getTime())));
+            const diffTime = Math.abs(maxDate.getTime() - minDate.getTime());
+            const daysSpan = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            totalRouteDays += daysSpan;
+        }
+    });
+
+    const dailyRate = 2000;
+    const totalViaticos = totalRouteDays * dailyRate;
+    const operationalCostPerKm = 15;
+    const fuelCost = quotedKm * operationalCostPerKm;
+    const subtotal = totalViaticos + fuelCost;
+    const margin = subtotal * 0.30;
+    const totalProjectValue = subtotal + margin;
+
+    // ✅ Agregar campo para tiendas únicas
+    const uniqueStoreIds = new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id)));
+    const totalStores = uniqueStoreIds.size;
+
+    return {
+        totalActualKm,
+        quotedKm,
+        totalKm: quotedKm, // Alias para compatibilidad
+        totalRouteDays,
+        dailyRate,
+        totalViaticos,
+        fuelCost,
+        subtotal,
+        margin,
+        totalProjectValue,
+        routesCount: optimizedRoutes.length,
+        totalStores // ✅ NUEVO: Tiendas ÚNICAS
+    };
+}, [optimizedRoutes]);
+
+// ===============================================
+// 5. ACTUALIZAR FOOTER en Dashboard de Rutas (línea ~2092)
+// ===============================================
+
+// BUSCAR:
+// {optimizedRoutes.reduce((acc, r) => acc + r.stops.length, 0)} TIENDAS
+
+// REEMPLAZAR CON:
+{ new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id))).size } TIENDAS ÚNICAS
+
+// ===============================================
+// FIN DEL PARCHE
+// ===============================================
+
+// INSTRUCCIONES DE APLICACIÓN:
+// 1. Abrir components/RoutePlanner.tsx
+// 2. Aplicar cada sección según los números de línea indicados
+// 3. Compilar: npm run build
+// 4. Probar con archivo de 220 tiendas

@@ -14,8 +14,11 @@ interface ExecutiveReportProps {
 }
 
 const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ routes, sites, config, isLightMode }) => {
-    // Calcular métricas agregadas
-    const totalStops = routes.reduce((acc, r) => acc + (r.stops?.length || 0), 0);
+    // Calcular métricas agregadas CORRECTAMENTE
+    // ✅ Contar tiendas ÚNICAS (no duplicar)
+    const uniqueStoreIds = new Set(routes.flatMap(r => r.stops?.map((s: any) => s.id) || []));
+    const totalStops = uniqueStoreIds.size; // Tiendas ÚNICAS
+
     const totalKm = routes.reduce((acc, r) => acc + (r.totalKm || 0), 0);
     const totalRoutes = routes.length;
 
@@ -79,9 +82,9 @@ const ExecutiveReport: React.FC<ExecutiveReportProps> = ({ routes, sites, config
             <div className="grid grid-cols-4 gap-8">
                 {[
                     { label: 'Total Rutas', value: totalRoutes, unit: 'unidades', color: 'blue' },
-                    { label: 'Tiendas Visitadas', value: totalStops, unit: 'puntos', color: 'emerald' },
-                    { label: 'Distancia Total', value: `${Math.round(totalKm).toLocaleString()} KM`, unit: 'recorrido', color: 'amber' },
-                    { label: 'Costo Campaña Est.', value: `$${Math.round(totalKm * 15 + totalRoutes * 2000).toLocaleString()}`, unit: 'pesos mxn', color: 'rose' },
+                    { label: 'Puntos de Venta', value: totalStops, unit: 'tiendas únicas', color: 'emerald' },
+                    { label: 'Recorrido Total', value: `${Math.round(totalKm).toLocaleString()}`, unit: 'kilómetros', color: 'amber' },
+                    { label: 'Viáticos y Operación', value: `$${Math.round(totalKm * 15).toLocaleString()}`, unit: 'pesos mxn', color: 'rose' },
                 ].map((kpi, i) => (
                     <div key={i} className={`${cardClass} p-10 rounded-[3rem] border relative overflow-hidden group`}>
                         <div className={`absolute top-0 right-0 w-32 h-32 bg-${kpi.color}-500/5 blur-3xl -mr-16 -mt-16`}></div>

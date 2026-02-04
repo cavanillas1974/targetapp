@@ -1,15 +1,14 @@
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { geminiService } from '../services/geminiService';
-import { COLORS } from '../constants';
-import { ChatMessage } from '../types';
+import { projectDatabase } from '../services/projectDatabase';
 
 const ChatWindow: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'model', text: 'Hola, soy el Cerebro Logístico de iamanos. Consulta lo que necesites sobre tus rutas, tiendas o el despliegue de Target POP.' }
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'model'; text: string }>>([
+    { role: 'model', text: '👋 Hola, soy el **Cerebro Logístico OptiFlot™**.\n\nPuedo responder CUALQUIER pregunta sobre tu proyecto:\n• Cuántas tiendas\n• Cuántos kilómetros\n• Detalles de rutas\n• Ciudades\n• Fechas\n• Viaticos\n• Costos\n• Cualquier consulta logística\n\n¿Qué necesitas saber?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [apiStatus, setApiStatus] = useState<'unknown' | 'connected' | 'error'>('unknown');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -18,34 +17,211 @@ const ChatWindow: React.FC = () => {
     }
   }, [messages]);
 
+  // Cargar contexto completo del proyecto activo
+  const getProjectContext = async () => {
+    try {
+      const activeId = localStorage.getItem('iamanos_active_project_id');
+      if (!activeId) {
+        return { error: 'No hay proyecto activo' };
+      }
+
+      // Intentar cargar desde IndexedDB primero
+      let project = await projectDatabase.loadProject(activeId);
+
+      // Fallback a localStorage
+      if (!project) {
+        const saved = localStorage.getItem(`iamanos_project_${activeId}`);
+        if (saved) {
+          try {
+            project = JSON.parse(saved);
+          } catch {
+            return { error: 'Proyecto corrupto' };
+          }
+        }
+      }
+
+      if (!project) {
+        return { error: 'Proyecto no encontrado' };
+      }
+
+      // Extraer información relevante
+      const sitesCount = project.sites?.length || 0;
+      const routesCount = project.optimizedRoutes?.length || 0;
+
+      // Calcular totales
+      const totalKm = project.optimizedRoutes?.reduce((acc: number, r: any) => acc + (r.totalKm || 0), 0) || 0;
+
+      // Rutas por fecha
+      const routesByDate: Record<string, number> = {};
+      project.optimizedRoutes?.forEach((route: any) => {
+        const date = route.date || 'Sin fecha';
+        routesByDate[date] = (routesByDate[date] || 0) + 1;
+      });
+
+      // Ciudades únicas
+      const cities = new Set<string>();
+      const states = new Set<string>();
+      project.sites?.forEach((site: any) => {
+        if (site.city) cities.add(site.city);
+        if (site.state) states.add(site.state);
+      });
+
+      // Calcular días y viáticos
+      let totalRouteDays = 0;
+      project.optimizedRoutes?.forEach((route: any) => {
+        const validDates = route.stops
+          ?.map((s: any) => s.scheduled_date ? new Date(s.scheduled_date) : null)
+          .filter((d: any) => d !== null && !isNaN(d.getTime())) || [];
+
+        if (validDates.length > 0) {
+          const minDate = new Date(Math.min(...validDates.map((d: any) => d.getTime())));
+          const maxDate = new Date(Math.max(...validDates.map((d: any) => d.getTime())));
+          const daysSpan = Math.ceil((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          totalRouteDays += daysSpan;
+        }
+      });
+
+      const dailyRate = 2000;
+      const totalViaticos = totalRouteDays * dailyRate;
+      const operationalCost = totalKm * 15;
+      const subtotal = totalViaticos + operationalCost;
+      const margin = subtotal * 0.30;
+      const totalProjectValue = subtotal + margin;
+
+      return {
+        projectName: project.metadata?.name || 'Sin nombre',
+        status: project.metadata?.status || 'PLANNING',
+        tiendas: sitesCount,
+        cuadrillas: routesCount,
+        kilometrosTotales: Math.round(totalKm),
+        diasRuta: totalRouteDays,
+        viaticosTotal: totalViaticos,
+        costoOperacional: operationalCost,
+        valorProyecto: totalProjectValue,
+        ciudades: Array.from(cities),
+        estados: Array.from(states),
+        rutasPorFecha: routesByDate,
+        fechaInicio: project.config?.startDate,
+        fechaFin: project.config?.endDate,
+        tiendasPorCiudad: project.sites?.reduce((acc: any, site: any) => {
+          const city = site.city || 'Sin ciudad';
+          acc[city] = (acc[city] || 0) + 1;
+          return acc;
+        }, {}) || {},
+        detallesRutas: project.optimizedRoutes?.map((r: any) => ({
+          id: r.id,
+          fecha: r.date,
+          tiendas: r.stops?.length || 0,
+          kilometros: r.totalKm || 0,
+          conductor: r.driverName,
+          ciudades: [...new Set(r.stops?.map((s: any) => s.city).filter(Boolean))]
+        })) || []
+      };
+    } catch (error) {
+      console.error('Error cargando contexto:', error);
+      return { error: 'Error al cargar contexto del proyecto' };
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim()) return;
+
     const userMsg = input;
     setInput('');
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setIsLoading(true);
 
     try {
-      // Intentar cargar contexto del proyecto activo
-      let projectContext = null;
-      const activeId = localStorage.getItem('iamanos_active_project_id');
-      if (activeId) {
-        const savedProject = localStorage.getItem(`iamanos_project_${activeId}`);
-        if (savedProject) {
-          try {
-            projectContext = JSON.parse(savedProject);
-          } catch (e) {
-            console.warn("Context load error ignored:", e);
-          }
+      // Cargar contexto completo
+      const projectContext = await getProjectContext();
+
+      // Crear prompt enriquecido con TODO el contexto
+      const enrichedContext = projectContext.error
+        ? { error: projectContext.error }
+        : {
+          ...projectContext,
+          contextSummary: `
+PROYECTO ACTIVO: ${projectContext.projectName}
+STATUS: ${projectContext.status}
+
+═══ RESUMEN EJECUTIVO ═══
+• Tiendas totales: ${projectContext.tiendas}
+• Cuadrillas asignadas: ${projectContext.cuadrillas}
+• Kilómetros totales: ${projectContext.kilometrosTotales} km
+• Días de ruta: ${projectContext.diasRuta} días
+• Viáticos totales: $${projectContext.viaticosTotal?.toLocaleString()}
+• Costo operacional: $${projectContext.costoOperacional?.toLocaleString()}
+• Valor total del proyecto: $${projectContext.valorProyecto?.toLocaleString()}
+
+═══ COBERTURA GEOGRÁFICA ═══
+• Estados: ${projectContext.estados?.join(', ') || 'N/A'}
+• Ciudades atendidas: ${projectContext.ciudades?.length || 0}
+• Principales: ${projectContext.ciudades?.slice(0, 5).join(', ') || 'N/A'}
+
+═══ FECHAS ═══
+• Inicio: ${projectContext.fechaInicio || 'No definida'}
+• Fin: ${projectContext.fechaFin || 'No definida'}
+
+═══ DISTRIBUCIÓN POR CIUDAD ═══
+${Object.entries(projectContext.tiendasPorCiudad || {})
+              .sort(([, a]: any, [, b]: any) => b - a)
+              .slice(0, 10)
+              .map(([city, count]) => `• ${city}: ${count} tiendas`)
+              .join('\n')}
+
+═══ RUTAS DETALLADAS ═══
+${projectContext.detallesRutas?.slice(0, 5).map((r: any, i: number) =>
+                `Ruta ${i + 1} (${r.id}):
+  - Fecha: ${r.fecha}
+  - Tiendas: ${r.tiendas}
+  - Km: ${r.kilometros}
+  - Conductor: ${r.conductor}
+  - Ciudades: ${r.ciudades?.join(', ') || 'N/A'}`
+              ).join('\n\n')}
+
+IMPORTANTE: Usa TODA esta información para responder preguntas específicas. Si te preguntan "cuántas tiendas", responde con el número exacto. Si preguntan sobre kilómetros, costos, ciudades, fechas, usa los datos arriba.
+            `
+        };
+
+      const response = await geminiService.getChatResponse(messages, userMsg, enrichedContext);
+      setMessages(prev => [...prev, { role: 'model', text: response }]);
+      setApiStatus('connected');
+
+    } catch (error: any) {
+      console.error('Chat Error:', error);
+      setApiStatus('error');
+
+      // Si falla Gemini, dar respuesta inteligente con los datos del proyecto
+      const projectContext = await getProjectContext();
+
+      let fallbackResponse = `[MODO FALLBACK - Gemini no disponible]\n\n`;
+
+      if (projectContext.error) {
+        fallbackResponse += `No puedo acceder al proyecto activo.\n\nError: ${projectContext.error}`;
+      } else {
+        // Intentar responder con el contexto disponible
+        const query = userMsg.toLowerCase();
+
+        if (query.includes('tienda') || query.includes('cuántas') || query.includes('cantidad')) {
+          fallbackResponse += `📊 **Tiendas:** ${projectContext.tiendas} tiendas en total`;
+        } else if (query.includes('kilómetro') || query.includes('km') || query.includes('distancia')) {
+          fallbackResponse += `🛣️ **Kilómetros:** ${projectContext.kilometrosTotales} km totales`;
+        } else if (query.includes('ruta') || query.includes('cuadrilla')) {
+          fallbackResponse += `🚛 **Rutas:** ${projectContext.cuadrillas} cuadrillas asignadas`;
+        } else if (query.includes('costo') || query.includes('precio') || query.includes('viático')) {
+          fallbackResponse += `💰 **Costos:**\n- Viáticos: $${projectContext.viaticosTotal?.toLocaleString()}\n- Operacional: $${projectContext.costoOperacional?.toLocaleString()}\n- Total: $${projectContext.valorProyecto?.toLocaleString()}`;
+        } else if (query.includes('ciudad') || query.includes('estado')) {
+          fallbackResponse += `📍 **Cobertura:**\n- ${projectContext.ciudades?.length || 0} ciudades\n- Estados: ${projectContext.estados?.join(', ')}`;
+        } else {
+          fallbackResponse += `Proyecto: **${projectContext.projectName}**\n\n`;
+          fallbackResponse += `• ${projectContext.tiendas} tiendas\n`;
+          fallbackResponse += `• ${projectContext.cuadrillas} cuadrillas\n`;
+          fallbackResponse += `• ${projectContext.kilometrosTotales} km\n`;
+          fallbackResponse += `• $${projectContext.valorProyecto?.toLocaleString()} valor total`;
         }
       }
 
-      const response = await geminiService.getChatResponse(messages, userMsg, projectContext);
-      setMessages(prev => [...prev, { role: 'model', text: response }]);
-    } catch (error: any) {
-      console.error("Chat Error:", error);
-      const errorMessage = error?.message || 'Error desconocido de conexión.';
-      setMessages(prev => [...prev, { role: 'model', text: `ERROR DEL SISTEMA: ${errorMessage}\n\nVerifica tu API Key o conexión.` }]);
+      setMessages(prev => [...prev, { role: 'model', text: fallbackResponse }]);
     } finally {
       setIsLoading(false);
     }
@@ -55,10 +231,12 @@ const ChatWindow: React.FC = () => {
     <div className="max-w-5xl mx-auto h-[calc(100vh-180px)] flex flex-col bg-[#0f172a]/30 rounded-[3rem] border border-white/5 overflow-hidden shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] backdrop-blur-3xl animate-in fade-in duration-700">
       <div className="px-10 py-8 border-b border-white/[0.03] bg-white/[0.02] flex items-center justify-between">
         <div className="flex items-center gap-5">
-          <div className="w-4 h-4 rounded-full bg-blue-500 animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]"></div>
+          <div className={`w-4 h-4 rounded-full ${apiStatus === 'connected' ? 'bg-green-500' : apiStatus === 'error' ? 'bg-yellow-500' : 'bg-blue-500'} animate-pulse shadow-[0_0_15px_rgba(59,130,246,0.5)]`}></div>
           <div>
             <h3 className="font-black text-xl text-white tracking-tighter uppercase">CONSULTA LO QUE NECESITES</h3>
-            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">Operación Nacional en Tiempo Real</p>
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">
+              {apiStatus === 'connected' ? '🟢 Gemini Conectado' : apiStatus === 'error' ? '🟡 Modo Fallback' : 'Operación Nacional en Tiempo Real'}
+            </p>
           </div>
         </div>
         <div className="px-4 py-2 bg-slate-900/50 rounded-xl border border-white/5 text-[10px] text-slate-400 font-black uppercase tracking-widest hidden md:block">

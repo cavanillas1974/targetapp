@@ -60,9 +60,12 @@ export interface SiteRecord {
   place_id?: string;
   formatted_address?: string;
   confidence_score: number; // 0-1
+  location_type?: 'ROOFTOP' | 'RANGE_INTERPOLATED' | 'GEOMETRIC_CENTER' | 'APPROXIMATE'; // Tipo de precisión de Google
+  precision_meters?: number; // Precisión estimada en metros (5, 10, 50, 100+)
 
   status: AddressStatus;
   notes?: string;
+  store_job_id?: string; // ID de trabajo para evidencias
 
   // Logic fields
   depotId?: string;
@@ -114,6 +117,7 @@ export interface PlannerConfig {
   routesTotalManual?: number;
   avgServiceMinutesPerStop: number;
   bufferMinutesPerDay: number;
+  bufferPercent: number; // Porcentaje de holgura (ej. 15%)
 }
 
 export interface ProjectCapacity {

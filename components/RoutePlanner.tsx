@@ -29,8 +29,14 @@ import {
   Cell
 } from 'recharts';
 import targetLogo from '../Images/logo.png';
+import { projectDatabase } from '../services/projectDatabase';
+import { DataIntegrityChecker } from '../utils/dataIntegrityChecker';
 import LZString from 'lz-string';
 import * as XLSX from 'xlsx';
+import { ImportAuditProcessor } from '../utils/importAuditProcessor';
+import { ImportAuditData, FinalDecision } from '../types/auditTypes';
+import { DataAuditScreen } from './DataAuditScreen';
+import { fuzzyGeocodingService } from '../services/fuzzyGeocodingService';
 
 const RoutePlanner: React.FC = () => {
   const [projects, setProjects] = useState<ProjectMetadata[]>([]);
@@ -69,7 +75,8 @@ const RoutePlanner: React.FC = () => {
     dailyReturnToDepot: false, // Pernocta/hotel
     routesTotalManual: 10,
     avgServiceMinutesPerStop: 60,
-    bufferMinutesPerDay: 30
+    bufferMinutesPerDay: 30,
+    bufferPercent: 15
   });
 
   const [depots, setDepots] = useState<Depot[]>([
@@ -92,6 +99,10 @@ const RoutePlanner: React.FC = () => {
   const [showQuotation, setShowQuotation] = useState(false);
   const [showRouteEditor, setShowRouteEditor] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+
+  // 🔍 Estados para Auditoría de Importación
+  const [auditData, setAuditData] = useState<ImportAuditData | null>(null);
+  const [showAuditScreen, setShowAuditScreen] = useState(false);
 
   const workloadData = useMemo(() => {
     if (optimizedRoutes.length === 0) return [];
@@ -137,7 +148,7 @@ const RoutePlanner: React.FC = () => {
     }
   }, [activeProjectId, projectName]);
 
-  const saveProject = (currentSites: SiteRecord[], routes: any[], currentEvidences: Evidence[], currentConfig: PlannerConfig) => {
+  const saveProject = async (currentSites: SiteRecord[], routes: any[], currentEvidences: Evidence[], currentConfig: PlannerConfig) => {
     try {
       const id = activeProjectId || crypto.randomUUID();
       const metadata: ProjectMetadata = {
@@ -158,31 +169,10 @@ const RoutePlanner: React.FC = () => {
         evidences: currentEvidences
       };
 
-      try {
-        localStorage.setItem(`iamanos_project_${id}`, JSON.stringify(projectData));
-      } catch (e: any) {
-        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-          console.warn("Storage Quota Exceeded - attempting to save stripped version");
-          // Si falla por espacio, intentamos guardar sin raw_data para ahorrar espacio
-          const strippedProject = {
-            ...projectData,
-            sites: projectData.sites.map(s => ({ ...s, raw_data: undefined })),
-            optimizedRoutes: projectData.optimizedRoutes.map(r => ({
-              ...r,
-              stops: r.stops.map((s: any) => ({ ...s, raw_data: undefined }))
-            }))
-          };
-          try {
-            localStorage.setItem(`iamanos_project_${id}`, JSON.stringify(strippedProject));
-          } catch (innerE) {
-            setError("MEMORIA LLENA: El navegador no tiene más espacio disponible. Por favor elimine proyectos antiguos desde el Tablero de Proyectos.");
-            return;
-          }
-        } else {
-          throw e;
-        }
-      }
+      // ✅ Usar projectDatabase para almacenamiento robusto (IndexedDB via Dexie/Custom)
+      await projectDatabase.saveProject(projectData);
 
+      // Fallback a LocalStorage para metadatos rápidos y compatibilidad legacy
       const updatedMetadata = activeProjectId
         ? projects.map(p => p.id === id ? metadata : p)
         : [metadata, ...projects];
@@ -193,7 +183,6 @@ const RoutePlanner: React.FC = () => {
       // Sincronizar rutas para el portal de evidencias (Versión compacta para MOBILE)
       if (routes.length > 0) {
         try {
-          // Quitamos datos pesados para la sincronización del portal móvil
           const lightRoutes = routes.map(r => ({
             ...r,
             stops: r.stops.map((s: any) => ({
@@ -223,40 +212,55 @@ const RoutePlanner: React.FC = () => {
     }
   };
 
-  const loadProject = (id: string) => {
-    const saved = localStorage.getItem(`iamanos_project_${id}`);
-    if (saved) {
-      try {
-        let project: Project;
-        // Check if string is likely compressed (not starting with { or [)
-        if (!saved.trim().startsWith('{') && !saved.trim().startsWith('[')) {
-          const decompressed = LZString.decompressFromUTF16(saved);
-          project = JSON.parse(decompressed || '{}');
-        } else {
-          project = JSON.parse(saved);
+  const loadProject = async (id: string) => {
+    console.log(`🔄 Cargando proyecto: ${id}`);
+    try {
+      // ✅ Primero intentar cargar desde projectDatabase (IndexedDB/dexie)
+      let project = await projectDatabase.loadProject(id);
+
+      // Fallback a LocalStorage si no está en la base de datos (migración)
+      if (!project) {
+        const saved = localStorage.getItem(`iamanos_project_${id}`);
+        if (saved) {
+          try {
+            if (!saved.trim().startsWith('{') && !saved.trim().startsWith('[')) {
+              const decompressed = LZString.decompressFromUTF16(saved);
+              project = JSON.parse(decompressed || '{}');
+            } else {
+              project = JSON.parse(saved);
+            }
+            // Migrar a projectDatabase
+            if (project) await projectDatabase.saveProject(project);
+          } catch (e) {
+            console.error("Failed to parse fallback localStorage project:", e);
+          }
         }
-
-        setActiveProjectId(id);
-        const name = project.metadata?.name || 'Proyecto Sin Nombre';
-        setProjectName(name);
-
-        if (project.sites) setSites(project.sites);
-        if (project.config) setConfig(project.config);
-        if (project.optimizedRoutes) setOptimizedRoutes(project.optimizedRoutes);
-        if (project.evidences) setEvidences(project.evidences);
-
-        // Determine correct step
-        if (project.metadata?.status === 'APPROVED') {
-          setActiveStep(4);
-          // Optional: lock UI here if needed
-        } else {
-          setActiveStep(project.optimizedRoutes?.length > 0 ? 4 : (project.sites?.length > 0 ? 2 : 1));
-        }
-
-      } catch (e) {
-        console.error("Failed to load project:", e);
-        setError("Error al cargar el proyecto. El archivo puede estar corrupto.");
       }
+
+      if (!project) {
+        setError("Error: El proyecto solicitado no fue encontrado.");
+        return;
+      }
+
+      setActiveProjectId(id);
+      setProjectName(project.metadata?.name || 'Proyecto Sin Nombre');
+
+      if (project.sites) setSites(project.sites);
+      if (project.config) setConfig(project.config);
+      if (project.optimizedRoutes) setOptimizedRoutes(project.optimizedRoutes);
+      if (project.evidences) setEvidences(project.evidences);
+
+      // Determinar paso correcto
+      if (project.metadata?.status === 'APPROVED') {
+        setActiveStep(4);
+      } else {
+        setActiveStep(project.optimizedRoutes?.length > 0 ? 4 : (project.sites?.length > 0 ? 2 : 1));
+      }
+
+      console.log(`✅ Proyecto cargado con éxito: ${id}`);
+    } catch (e: any) {
+      console.error("Failed to load project:", e);
+      setError("Error al cargar el proyecto: " + e.message);
     }
   };
 
@@ -280,8 +284,14 @@ const RoutePlanner: React.FC = () => {
 
   const quotationData = useMemo(() => {
     if (optimizedRoutes.length === 0) return null;
-    const totalActualKm = optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0);
-    const quotedKm = totalActualKm; // Kilometraje real calculado
+
+    // ✅ Validar que cada ruta tenga km válidos (no NaN, no undefined, no null)
+    const totalActualKm = optimizedRoutes.reduce((acc, r) => {
+      const km = parseFloat(String(r.totalKm || 0));
+      return acc + (isNaN(km) ? 0 : km);
+    }, 0);
+
+    const quotedKm = totalActualKm || 0; // Fallback a 0 si es 0 o NaN
 
     let totalRouteDays = 0;
 
@@ -321,9 +331,14 @@ const RoutePlanner: React.FC = () => {
     // pero mantenemos estructura comercial estándar (Costo + Margen)
     const totalProjectValue = subtotal + margin;
 
+    // ✅ Agregar campo para tiendas únicas
+    const uniqueStoreIds = new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id)));
+    const totalStores = uniqueStoreIds.size;
+
     return {
       totalActualKm,
       quotedKm,
+      totalKm: quotedKm, // Alias para compatibilidad con PDF
       totalRouteDays,
       dailyRate,
       totalViaticos,
@@ -331,7 +346,8 @@ const RoutePlanner: React.FC = () => {
       subtotal,
       margin,
       totalProjectValue,
-      routesCount: optimizedRoutes.length
+      routesCount: optimizedRoutes.length,
+      totalStores // ✅ NUEVO: Tiendas ÚNICAS
     };
   }, [optimizedRoutes]);
 
@@ -530,7 +546,7 @@ const RoutePlanner: React.FC = () => {
     }
   }, [activeTab, optimizedRoutes, mapFilters, depots, isLightMode]);
 
-  const processFileRows = (headers: string[], rows: any[][]) => {
+  const processFileRows = (headers: string[], rows: any[][], fileName: string = 'archivo.xlsx') => {
     const originalHeaders = headers.map(h =>
       h.trim().replace(/^["']|["']$/g, '').replace(/^\uFEFF/, '')
     );
@@ -595,9 +611,47 @@ const RoutePlanner: React.FC = () => {
       } as SiteRecord;
     });
 
-    setSites(data);
-    saveProject(data, [], [], config);
+    // 🔍 GENERAR AUDITORÍA ANTES DE GUARDAR
+    console.log(`📊 Generando auditoría de importación para ${data.length} filas...`);
+
+    // Generar auditoría completa
+    ImportAuditProcessor.processImport(data, fileName).then(audit => {
+      console.log('✅ Auditoría generada:', audit.summary);
+      setAuditData(audit);
+      setShowAuditScreen(true);
+    }).catch(err => {
+      console.error('❌ Error generando auditoría:', err);
+      alert('Error al generar auditoría de importación. Revisa la consola.');
+    });
+  };
+
+  // 🔍 Handlers de Auditoría de Importación
+  const handleAuditApproval = (approvedData: ImportAuditData) => {
+    // Filtrar solo tiendas que SE_QUEDAN
+    const finalSites = approvedData.entries
+      .filter(e => e.status_final === FinalDecision.SE_QUEDA)
+      .map(e => ({
+        ...e.original.raw_data,
+        lat: e.processed.lat,
+        lng: e.processed.lng,
+        place_id: e.processed.place_id,
+        formatted_address: e.processed.formatted_address,
+        confidence_score: e.processed.confidence_score
+      } as SiteRecord));
+
+    console.log(`✅ Aprobadas ${finalSites.length} de ${approvedData.entries.length} tiendas`);
+
+    setSites(finalSites);
+    saveProject(finalSites, [], [], config);
+    setShowAuditScreen(false);
+    setAuditData(null);
     setActiveStep(2);
+  };
+
+  const handleAuditCancel = () => {
+    setShowAuditScreen(false);
+    setAuditData(null);
+    // No avanzar, usuario puede volver a cargar archivo
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -626,7 +680,7 @@ const RoutePlanner: React.FC = () => {
               .map(c => c.trim().replace(/^["']|["']$/g, ''))
           );
 
-          processFileRows(headers, rows);
+          processFileRows(headers, rows, file.name);
         } catch (err) {
           console.error("Error parsing CSV", err);
           setError("Error al leer el archivo CSV. Verifica el formato.");
@@ -647,7 +701,7 @@ const RoutePlanner: React.FC = () => {
           const headers = jsonData[0].map(h => String(h || ''));
           const rows = jsonData.slice(1);
 
-          processFileRows(headers, rows);
+          processFileRows(headers, rows, file.name);
         } catch (err) {
           console.error("Error parsing Excel", err);
           setError("Error al leer el archivo Excel. Asegúrate de que no esté protegido.");
@@ -1124,6 +1178,17 @@ const RoutePlanner: React.FC = () => {
     setActiveStep(1);
     setFileContent('');
   };
+
+  // 🔍 RENDERIZAR PANTALLA DE AUDITORÍA SI ESTÁ ACTIVA
+  if (showAuditScreen && auditData) {
+    return (
+      <DataAuditScreen
+        auditData={auditData}
+        onApprove={handleAuditApproval}
+        onCancel={handleAuditCancel}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen transition-all duration-700 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#030712] text-white'}`}>
@@ -1972,7 +2037,7 @@ const RoutePlanner: React.FC = () => {
                             {/* Footer Stats */}
                             <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
                               <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                                {optimizedRoutes.length} RUTAS • {optimizedRoutes.reduce((acc, r) => acc + r.stops.length, 0)} TIENDAS • {Math.round(optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0)).toLocaleString()} KM
+                                {optimizedRoutes.length} RUTAS • {new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id))).size} TIENDAS ÚNICAS • {Math.round(optimizedRoutes.reduce((acc, r) => acc + (r.totalKm || 0), 0)).toLocaleString()} KM
                               </p>
                               <button
                                 onClick={() => setShowRouteEditor(true)}
@@ -3597,7 +3662,7 @@ const RoutePlanner: React.FC = () => {
                           <div className="grid grid-cols-3 gap-10 border-t border-blue-800/50 pt-10 relative z-10">
                             <div>
                               <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest mb-1">Cobertura</p>
-                              <p className="text-3xl font-black italic">{sites.length} <span className="text-sm font-normal text-blue-300 not-italic">Puntos</span></p>
+                              <p className="text-3xl font-black italic">{new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id))).size} <span className="text-sm font-normal text-blue-300 not-italic">Puntos</span></p>
                             </div>
                             <div>
                               <p className="text-[10px] text-blue-200 uppercase font-black tracking-widest mb-1">Logística</p>
@@ -3830,7 +3895,7 @@ const RoutePlanner: React.FC = () => {
                       <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">Alcance</p>
                       <div className="space-y-6">
                         <div>
-                          <p className="text-4xl font-black text-slate-900">{sites.length}</p>
+                          <p className="text-4xl font-black text-slate-900">{new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id))).size}</p>
                           <p className="text-xs font-bold text-slate-500 uppercase">Puntos de Venta</p>
                         </div>
                         <div>
