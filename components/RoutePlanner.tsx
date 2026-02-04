@@ -1618,7 +1618,9 @@ const RoutePlanner: React.FC = () => {
                       <p className={`text-[10px] font-bold uppercase tracking-widest ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Inicia el:</p>
                       <p className={`text-xl font-black italic uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                         {(() => {
-                          const [y, m, d] = config.startDate.split('-').map(Number);
+                          const parts = config.startDate?.split('-') || [];
+                          if (parts.length < 3) return 'Fecha Inválida';
+                          const [y, m, d] = parts.map(Number);
                           return new Date(y, m - 1, d).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
                         })()}
                       </p>
@@ -1627,7 +1629,9 @@ const RoutePlanner: React.FC = () => {
                       <p className={`text-[10px] font-bold uppercase tracking-widest ${isLightMode ? 'text-slate-400' : 'text-slate-500'}`}>Finaliza el:</p>
                       <p className={`text-xl font-black italic uppercase italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                         {(() => {
-                          const [y, m, d] = config.endDate.split('-').map(Number);
+                          const parts = config.endDate?.split('-') || [];
+                          if (parts.length < 3) return 'Fecha Inválida';
+                          const [y, m, d] = parts.map(Number);
                           return new Date(y, m - 1, d).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
                         })()}
                       </p>
@@ -3021,7 +3025,10 @@ const RoutePlanner: React.FC = () => {
                                 <div>
                                   <h4 className={`text-xl font-black uppercase italic tracking-tight ${isLightMode ? 'text-slate-900' : 'text-white'}`}>
                                     {(() => {
-                                      const [y, m, d] = date.split('-').map(Number);
+                                      if (!date) return 'Fecha desconocida';
+                                      const parts = date.split('-');
+                                      if (parts.length < 3) return date;
+                                      const [y, m, d] = parts.map(Number);
                                       return new Date(y, m - 1, d).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
                                     })()}
                                   </h4>
@@ -3096,7 +3103,7 @@ const RoutePlanner: React.FC = () => {
                                         <div className="mt-8 flex flex-wrap gap-4 pt-6 border-t border-white/5">
                                           {stopEvidences.map(ev => (
                                             <div key={ev.id} className={`px-4 py-2 rounded-lg text-[8px] font-black uppercase tracking-widest flex items-center gap-2 ${ev.category === 'ACUSE_RECIBIDO' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'}`}>
-                                              {ev.category === 'ACUSE_RECIBIDO' ? '📄 ACUSE' : '📸 EVIDENCIA'} • {ev.uploaded_at.split('T')[1].substring(0, 5)}
+                                              {ev.category === 'ACUSE_RECIBIDO' ? '📄 ACUSE' : '📸 EVIDENCIA'} • {ev.uploaded_at?.split('T')[1]?.substring(0, 5) || '00:00'}
                                             </div>
                                           ))}
                                         </div>
