@@ -1192,17 +1192,6 @@ const RoutePlanner: React.FC = () => {
     setFileContent('');
   };
 
-  // 🔍 RENDERIZAR PANTALLA DE AUDITORÍA SI ESTÁ ACTIVA
-  if (showAuditScreen && auditData) {
-    return (
-      <DataAuditScreen
-        auditData={auditData}
-        onApprove={handleAuditApproval}
-        onCancel={handleAuditCancel}
-      />
-    );
-  }
-
   return (
     <div className={`min-h-screen transition-all duration-700 ${isLightMode ? 'bg-slate-50 text-slate-900' : 'bg-[#030712] text-white'}`}>
       {/* Header Ejecutivo Moderno */}
