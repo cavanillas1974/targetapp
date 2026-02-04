@@ -630,23 +630,12 @@ const RoutePlanner: React.FC = () => {
       } as SiteRecord;
     });
 
-    // 🔍 GENERAR AUDITORÍA ANTES DE GUARDAR
-    console.log(`📊 Generando auditoría de importación para ${data.length} filas...`);
-
-    // Generar auditoría completa
-    ImportAuditProcessor.processImport(data, fileName).then(audit => {
-      console.log('✅ Auditoría generada:', audit.summary);
-      setAuditData(audit);
-      setShowAuditScreen(true);
-    }).catch(err => {
-      console.error('❌ Error generando auditoría:', err);
-      // Fallback en caso de error crítico en auditoría: Pasar directo (Legacy Mode)
-      // alert('Error al generar auditoría de importación. Revisa la consola.');
-      console.warn("⚠️ Bypass de Auditoría activado por error. Cargando sitios directos.");
-      setSites(data as SiteRecord[]);
-      saveProject(data as SiteRecord[], [], [], config);
-      setActiveStep(2);
-    });
+    // 🚀 BYPASS DE AUDITORÍA (Solicitado por Usuario)
+    // Cargar datos directamente sin pasar por pantalla de confirmación
+    console.log(`🚀 Importación directa de ${data.length} sitios (Audit Bypass)`);
+    setSites(data as SiteRecord[]);
+    saveProject(data as SiteRecord[], [], [], config);
+    setActiveStep(2);
   };
 
   // 🔍 Handlers de Auditoría de Importación
