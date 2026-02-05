@@ -184,44 +184,23 @@ IMPORTANTE: Usa TODA esta información para responder preguntas específicas. Si
         };
 
       const response = await geminiService.getChatResponse(messages, userMsg, enrichedContext);
+
+      // Detectar si la respuesta es un mensaje de error del servicio
+      if (response.startsWith('ERROR') || response.includes('Error 404') || response.includes('ERROR DE CONEXIÓN')) {
+        setApiStatus('error');
+      } else {
+        setApiStatus('connected');
+      }
+
       setMessages(prev => [...prev, { role: 'model', text: response }]);
-      setApiStatus('connected');
 
     } catch (error: any) {
       console.error('Chat Error:', error);
       setApiStatus('error');
 
-      // Si falla Gemini, dar respuesta inteligente con los datos del proyecto
-      const projectContext = await getProjectContext();
-
-      let fallbackResponse = `[MODO FALLBACK - Gemini no disponible]\n\n`;
-
-      if (projectContext.error) {
-        fallbackResponse += `No puedo acceder al proyecto activo.\n\nError: ${projectContext.error}`;
-      } else {
-        // Intentar responder con el contexto disponible
-        const query = userMsg.toLowerCase();
-
-        if (query.includes('tienda') || query.includes('cuántas') || query.includes('cantidad')) {
-          fallbackResponse += `📊 **Tiendas:** ${projectContext.tiendas} tiendas en total`;
-        } else if (query.includes('kilómetro') || query.includes('km') || query.includes('distancia')) {
-          fallbackResponse += `🛣️ **Kilómetros:** ${projectContext.kilometrosTotales} km totales`;
-        } else if (query.includes('ruta') || query.includes('cuadrilla')) {
-          fallbackResponse += `🚛 **Rutas:** ${projectContext.cuadrillas} cuadrillas asignadas`;
-        } else if (query.includes('costo') || query.includes('precio') || query.includes('viático')) {
-          fallbackResponse += `💰 **Costos:**\n- Viáticos: $${projectContext.viaticosTotal?.toLocaleString()}\n- Operacional: $${projectContext.costoOperacional?.toLocaleString()}\n- Total: $${projectContext.valorProyecto?.toLocaleString()}`;
-        } else if (query.includes('ciudad') || query.includes('estado')) {
-          fallbackResponse += `📍 **Cobertura:**\n- ${projectContext.ciudades?.length || 0} ciudades\n- Estados: ${projectContext.estados?.join(', ')}`;
-        } else {
-          fallbackResponse += `Proyecto: **${projectContext.projectName}**\n\n`;
-          fallbackResponse += `• ${projectContext.tiendas} tiendas\n`;
-          fallbackResponse += `• ${projectContext.cuadrillas} cuadrillas\n`;
-          fallbackResponse += `• ${projectContext.kilometrosTotales} km\n`;
-          fallbackResponse += `• $${projectContext.valorProyecto?.toLocaleString()} valor total`;
-        }
-      }
-
-      setMessages(prev => [...prev, { role: 'model', text: fallbackResponse }]);
+      // Mostrar error real en lugar de fallback simulado
+      const errorMessage = `ERROR CRÍTICO: ${error.message || 'No se pudo conectar con el servicio de IA.'}\n\nPor favor verifique que la API Key en .env.local sea válida para Gemini (Google AI Studio) y no solo para Maps.`;
+      setMessages(prev => [...prev, { role: 'model', text: errorMessage }]);
     } finally {
       setIsLoading(false);
     }
@@ -235,7 +214,7 @@ IMPORTANTE: Usa TODA esta información para responder preguntas específicas. Si
           <div>
             <h3 className="font-black text-xl text-white tracking-tighter uppercase">CONSULTA LO QUE NECESITES</h3>
             <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em] mt-0.5">
-              {apiStatus === 'connected' ? '🟢 Gemini Conectado' : apiStatus === 'error' ? '🟡 Modo Fallback' : 'Operación Nacional en Tiempo Real'}
+              {apiStatus === 'connected' ? '🟢 Gemini Conectado' : apiStatus === 'error' ? '🔴 Error de Conexión' : 'Operación Nacional en Tiempo Real'}
             </p>
           </div>
         </div>

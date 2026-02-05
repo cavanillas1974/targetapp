@@ -1481,7 +1481,7 @@ const RoutePlanner: React.FC = () => {
                     </div>
 
                     <div className="text-left">
-                      <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Automated Process</p>
+                      <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-0.5">Proceso Automatizado</p>
                       <p className="text-lg font-black text-white italic tracking-tight">{isCleaning ? 'PROCESANDO DATA...' : 'INICIAR LIMPIEZA & GIS'}</p>
                     </div>
 
@@ -2397,7 +2397,7 @@ const RoutePlanner: React.FC = () => {
                           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center text-3xl group-hover:scale-110 transition-transform">⚡</div>
                           <div>
                             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Velocidad</p>
-                            <p className={`text-2xl font-black italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{Math.round(evidences.length / Math.max(7, 1))} <span className="text-xs text-slate-500 font-bold uppercase italic">per day</span></p>
+                            <p className={`text-2xl font-black italic tracking-tighter ${isLightMode ? 'text-slate-900' : 'text-white'}`}>{Math.round(evidences.length / Math.max(7, 1))} <span className="text-xs text-slate-500 font-bold uppercase italic">por día</span></p>
                           </div>
                         </div>
                         <div className={`${isLightMode ? 'bg-white border-slate-100' : 'bg-white/[0.03] border-white/5'} p-8 rounded-[3rem] border flex items-center gap-6 group hover:translate-x-2 transition-all`}>
@@ -2421,7 +2421,7 @@ const RoutePlanner: React.FC = () => {
                       {/* War Room Live Reel */}
                       <div className={`${isLightMode ? 'bg-slate-900 text-white' : 'bg-slate-900/40 border-white/5'} col-span-2 p-10 rounded-[4rem] border relative overflow-hidden flex flex-col`}>
                         <div className="flex items-center justify-between mb-8">
-                          <h5 className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-400 italic">Live War Room Reel — Últimas 24h</h5>
+                          <h5 className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-400 italic">Sala de Guerra — Últimas 24h</h5>
                           <span className="flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
                             <span className="text-[8px] font-black uppercase tracking-widest">En Vivo</span>
@@ -2517,6 +2517,64 @@ const RoutePlanner: React.FC = () => {
                 )}
                 {activeTab === 'LIST' && (
                   <div className="space-y-16 animate-in slide-in-from-left-4 duration-500 pb-20">
+
+                    {/* 🚨 SECCIÓN DE TIENDAS EXCLUIDAS / ERRORES (Solicitud Crítica) */}
+                    {(() => {
+                      const assignedSiteIds = new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id)));
+                      const excludedSites = sites.filter(s => !assignedSiteIds.has(s.id));
+
+                      if (excludedSites.length === 0) return null;
+
+                      return (
+                        <div className="mx-10 mb-8">
+                          <div className="bg-red-500/10 border border-red-500/20 rounded-[2.5rem] p-10 shadow-2xl animate-in fade-in slide-in-from-top-4 duration-700">
+                            <div className="flex items-center gap-6 mb-6">
+                              <div className="w-16 h-16 bg-red-500 rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/30 animate-pulse">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+                              </div>
+                              <div>
+                                <h3 className={`text-3xl font-black uppercase italic tracking-tighter ${isLightMode ? 'text-red-600' : 'text-red-400'}`}>
+                                  Atención: {excludedSites.length} Tiendas Excluidas
+                                </h3>
+                                <p className="text-[11px] font-black text-red-400/80 uppercase tracking-widest mt-1">
+                                  Estas tiendas NO fueron incluidas en las rutas por errores de ubicación o datos.
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="overflow-x-auto custom-scrollbar rounded-3xl border border-red-500/10 bg-black/20">
+                              <table className="w-full text-left">
+                                <thead className="bg-red-500/20 text-red-200">
+                                  <tr>
+                                    <th className="py-4 px-6 text-[10px] font-black uppercase tracking-widest">ID Tienda</th>
+                                    <th className="py-4 px-6 text-[10px] font-black uppercase tracking-widest">Nombre</th>
+                                    <th className="py-4 px-6 text-[10px] font-black uppercase tracking-widest">Dirección Problema</th>
+                                    <th className="py-4 px-6 text-[10px] font-black uppercase tracking-widest">Ciudad/Estado</th>
+                                    <th className="py-4 px-6 text-[10px] font-black uppercase tracking-widest">Razón Exclusión</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-red-500/10">
+                                  {excludedSites.map(site => (
+                                    <tr key={site.id} className="hover:bg-red-500/5 transition-colors">
+                                      <td className="py-4 px-6 font-mono font-bold text-red-300">{site.site_id}</td>
+                                      <td className="py-4 px-6 font-bold text-white">{site.name_sitio}</td>
+                                      <td className="py-4 px-6 text-xs text-slate-400">{site.direccion_completa}</td>
+                                      <td className="py-4 px-6 text-xs text-slate-400">{site.city}, {site.state}</td>
+                                      <td className="py-4 px-6">
+                                        <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-400 rounded-lg text-[9px] font-black uppercase tracking-widest border border-red-500/30">
+                                          {!site.lat || site.lat === 0 ? 'FALTA GEOLOCALIZACIÓN' : 'ERROR DE DATOS'}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {Object.entries(
                       optimizedRoutes.reduce((acc, route) => {
                         const d = route.date || route.startDate || 'Sin Fecha';

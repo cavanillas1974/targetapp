@@ -202,45 +202,89 @@ export const googleMapsService = {
     /**
      * Obtiene distancia y duración real de una ruta completa
      */
+    /**
+     * Obtiene distancia y duración real de una ruta completa
+     * Maneja automáticamente la paginación para rutas con >25 waypoints
+     */
     async getRouteDistance(origin: { lat: number, lng: number }, stops: SiteRecord[], returnToOrigin: boolean = true): Promise<{ distance: number, duration: number } | null> {
         if (!getApiKey() || stops.length === 0) {
             // Fallback: usar calculo haversine simple de LogicEngine
             if (stops.length > 0) {
                 const distance = LogicEngine.estimateRouteDistance(origin, stops, returnToOrigin);
-                return { distance, duration: distance * 1.5 + (stops.length * 5) };
+                return { distance, duration: distance * 1.5 + (stops.length * 60) };
             }
             return null;
         }
 
         try {
-            const waypoints = stops.map(s => `${s.lat},${s.lng}`).join('|');
-            const originStr = `${origin.lat},${origin.lng}`;
-            const destStr = returnToOrigin ? originStr : `${stops[stops.length - 1].lat},${stops[stops.length - 1].lng}`;
+            // Google Directions API soporta max 25 waypoints (1 origin + 1 dest + 23 waypoints)
+            // Dividimos el viaje en "legs" de max 23 waypoints intermedios
+            const CHUNK_SIZE = 23;
+            let totalDistance = 0;
+            let totalDuration = 0;
+            let currentOrigin = origin;
 
-            const response = await fetch(
-                `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}&waypoints=${waypoints}&key=${getApiKey()}`
-            );
-            const data = await response.json();
+            // Procesar en lotes
+            for (let i = 0; i < stops.length; i += CHUNK_SIZE) {
+                const chunk = stops.slice(i, i + CHUNK_SIZE);
+                const isLastChunk = i + CHUNK_SIZE >= stops.length;
 
-            if (data.status === 'OK' && data.routes.length > 0) {
-                const route = data.routes[0];
-                let totalDistance = 0;
-                let totalDuration = 0;
+                // El destino de este chunk es el último punto del chunk
+                // Si es el último chunk y returnToOrigin es true, el destino final es el origen
+                // PERO Directions API calcula A -> B -> C.
+                // Para chaining: 
+                // Chunk 1: Origin -> [w1...w22] -> w23 (Destino del chunk)
+                // Chunk 2: w23 (Nuevo Origin) -> [w24...w46] -> w47
 
-                route.legs.forEach((leg: any) => {
-                    totalDistance += leg.distance.value;
-                    totalDuration += leg.duration.value;
-                });
+                const destination = chunk[chunk.length - 1];
+                const waypoints = chunk.slice(0, chunk.length - 1).map(s => `${s.lat},${s.lng}`).join('|');
 
-                return {
-                    distance: totalDistance / 1000, // Km
-                    duration: totalDuration / 60 // Minutos
-                };
+                const originStr = `${currentOrigin.lat},${currentOrigin.lng}`;
+                const destStr = `${destination.lat},${destination.lng}`;
+
+                const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}${waypoints ? `&waypoints=${waypoints}` : ''}&key=${getApiKey()}`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status === 'OK' && data.routes.length > 0) {
+                    const route = data.routes[0];
+                    route.legs.forEach((leg: any) => {
+                        totalDistance += leg.distance.value;
+                        totalDuration += leg.duration.value;
+                    });
+                } else {
+                    console.warn(`Partial route chunk failed: ${data.status}`);
+                }
+
+                // Actualizar origen para el siguiente loop
+                currentOrigin = { lat: destination.lat!, lng: destination.lng! };
             }
-            return null;
+
+            // Si hay retorno a base, calcular la última pierna: Último Store -> Origen Inicial
+            if (returnToOrigin) {
+                const lastStore = stops[stops.length - 1];
+                const originStr = `${lastStore.lat},${lastStore.lng}`;
+                const destStr = `${origin.lat},${origin.lng}`;
+                const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${originStr}&destination=${destStr}&key=${getApiKey()}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.status === 'OK' && data.routes.length > 0) {
+                    totalDistance += data.routes[0].legs[0].distance.value;
+                    totalDuration += data.routes[0].legs[0].duration.value;
+                }
+            }
+
+            return {
+                distance: totalDistance / 1000, // Km
+                duration: totalDuration / 60 // Minutos
+            };
+
         } catch (error) {
             console.error("Route distance calculation error:", error);
-            return null;
+            // Fallback en error
+            const distance = LogicEngine.estimateRouteDistance(origin, stops, returnToOrigin);
+            return { distance, duration: distance * 1.5 };
         }
     }
 };

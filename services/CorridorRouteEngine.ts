@@ -327,6 +327,24 @@ export const CorridorRouteEngine = {
             const firstStore = sequencedStores[0];
             const lastStore = sequencedStores[sequencedStores.length - 1];
 
+            // Calcular retorno a base (CDMX/Hub) para completar el ciclo logístico
+            const distReturn = LogicEngine.calculateDistance(
+                lastStore.lat!, lastStore.lng!,
+                routeHub.lat, routeHub.lng
+            ) * 1.3;
+
+            // Debug: Verificar primer tramo
+            if (scheduledDays.length > 0 && scheduledDays[0].stores.length > 0) {
+                const firstS = scheduledDays[0].stores[0];
+                const startDist = LogicEngine.calculateDistance(routeHub.lat, routeHub.lng, firstS.lat!, firstS.lng!);
+                console.log(`🛣️ RUTA ${corridor.name}:`);
+                console.log(`   - Inicio (Hub): ${routeHub.name} (${routeHub.lat}, ${routeHub.lng})`);
+                console.log(`   - Primera Tienda: ${firstS.name_sitio} (${firstS.lat}, ${firstS.lng})`);
+                console.log(`   - Distancia Inicial: ${startDist.toFixed(1)} km`);
+                console.log(`   - Distancia Retorno: ${distReturn.toFixed(1)} km`);
+                console.log(`   - KM Acumulados Rutas: ${totalKm.toFixed(1)} km`);
+            }
+
             routes.push({
                 id: (routeIndex + 1).toString().padStart(2, '0'),
                 corridorId,
@@ -335,7 +353,7 @@ export const CorridorRouteEngine = {
                 direction: corridor.direction,
                 stores: sequencedStores,
                 scheduledDays,
-                totalKm,
+                totalKm: Math.round(totalKm + distReturn), // Incluir retorno a base
                 totalDays: scheduledDays.length,
                 startDate: config.startDate,
                 endDate: lastDay?.date || config.startDate,
@@ -701,7 +719,10 @@ export const CorridorRouteEngine = {
                         minutes_travel_day_total: day.minutesTravel,
                         minutes_service_day_total: day.minutesService,
                         minutes_day_total: day.minutesTotal,
-                        day_status: day.minutesTotal > 720 ? 'OVERTIME' : 'OK'
+                        day_status: day.minutesTotal > 720 ? 'OVERTIME' : 'OK',
+                        // MAPPING CRÍTICO PARA UI:
+                        distance_km: store.kmFromPrevious || 0,
+                        travel_time_minutes: store.minutesFromPrevious || 0
                     } as any);
                 }
             }

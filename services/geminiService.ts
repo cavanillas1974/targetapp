@@ -28,56 +28,8 @@ const getAI = () => {
 };
 
 // --- MOCK DATA GENERATORS (FALLBACK) ---
-const getMockChatResponse = (msg: string) => {
-  return `[MODO SIMULADO - SIN CONEXIÓN A GEMINI]
-  
-Entendido. Como el sistema de IA no está respondiendo (Error de API/Red), te daré una respuesta basada en protocolos estándar:
+// MOCK CHAT RESPONSE REMOVED
 
-Sobre "${msg}": 
-El sistema OptiFlot calcula esto basándose en la distancia geodésica y las restricciones de tráfico promedio. Para las rutas mostradas, se priorizó la cobertura radial desde el Centro de Distribución para minimizar el consumo de combustible (-15% est).
-
-¿Necesitas ajustar algún parámetro manual?`;
-};
-
-const getMockCleanAddresses = (text: string) => {
-  return {
-    sites: [
-      {
-        site_id: "MOCK-001",
-        name_sitio: "Tienda Ejemplo 1 (Simulada)",
-        direccion_normalizada: "Av. Reforma 222, Juárez, 06600, CDMX",
-        status: "OK",
-        lat: 19.4294,
-        lng: -99.1627
-      },
-      {
-        site_id: "MOCK-002",
-        name_sitio: "Tienda Ejemplo 2 (Simulada)",
-        direccion_normalizada: "Insurgentes Sur 100, Roma, 06700, CDMX",
-        status: "OK",
-        lat: 19.4200,
-        lng: -99.1630
-      }
-    ]
-  };
-};
-
-const getMockOptimization = (stops: number) => {
-  return {
-    routes: [
-      {
-        id: "RUTA-SIM-1",
-        date: new Date().toISOString().split('T')[0],
-        driverName: "Operador Simulado A",
-        base: "CDMX",
-        color: "#3b82f6",
-        stopIds: [],
-        totalKm: 45.5,
-        estTimeMinutes: 180
-      }
-    ]
-  };
-};
 
 // --- HELPER FOR SAFE JSON PARSING ---
 const safeJsonParse = (text: string, fallback: any) => {
@@ -98,17 +50,17 @@ const safeJsonParse = (text: string, fallback: any) => {
 export const geminiService = {
   async cleanAddresses(rawText: string) {
     try {
-      const model = getAI().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const model = getAI().getGenerativeModel({ model: "gemini-1.5-flash" });
       const prompt = `
           Eres un experto en GIS. Limpia y normaliza: "${rawText}".
           SALIDA JSON: { "sites": [{ "name_sitio", "direccion_normalizada", "status", "lat": 0, "lng": 0 }] }
         `;
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      return safeJsonParse(text, getMockCleanAddresses(rawText));
+      return safeJsonParse(text, { sites: [] });
     } catch (e) {
-      console.warn("Gemini API Error (CleanAddresses). Using Mock.", e);
-      return getMockCleanAddresses(rawText);
+      console.warn("Gemini API Error (CleanAddresses).", e);
+      throw new Error("Error normalizando direcciones con IA.");
     }
   },
 
@@ -125,7 +77,8 @@ export const geminiService = {
         }
       }
 
-      const model = getAI().getGenerativeModel({ model: "gemini-1.5-pro" });
+      // Use gemini-1.5-flash as it is generally available and faster
+      const model = getAI().getGenerativeModel({ model: "gemini-1.5-flash" });
 
       // Transformar historial para API y limitar longitud para ahorrar tokens/evitar errores
       const formattedHistory = history
@@ -156,37 +109,41 @@ export const geminiService = {
       const fullMessage = `${systemInstruction}\n\nPREGUNTA USUARIO: ${message}`;
       const result = await chat.sendMessage(fullMessage);
       return result.response.text();
-    } catch (e) {
+    } catch (e: any) {
       console.error("Gemini Chat Error:", e);
-      return getMockChatResponse(message);
+      // Return clear error message instead of mock
+      if (e.message?.includes('404') || e.message?.includes('not found')) {
+        return "ERROR DE CONEXIÓN: El servicio de IA no está disponible con la API Key actual. (Error 404 - Model Not Found). Por favor verifica tu configuración y permisos de API.";
+      }
+      return `ERROR DEL SISTEMA: ${e.message || 'Error desconocido al conectar con Gemini.'}`;
     }
   },
 
   async suggestOptimalRouteCount(stops: any[], base: any, config: any) {
-    const fallback = { suggestedRouteCount: Math.ceil(stops.length / 5), reasoning: "Cálculo simulado por fallo de API." };
+    // No mock available.
     try {
-      const model = getAI().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const model = getAI().getGenerativeModel({ model: "gemini-1.5-flash" });
       const prompt = `Analiza ${stops.length} sitios. Sugiere rutas JSON: { "suggestedRouteCount": number, "reasoning": "string" }`;
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      return safeJsonParse(text, fallback);
-    } catch (e) {
-      console.warn("Gemini API Error (Suggest). Using Mock.", e);
-      return fallback;
+      return safeJsonParse(text, { suggestedRouteCount: 1, reasoning: "Fallback por error de parsing." });
+    } catch (e: any) {
+      console.warn("Gemini API Error (Suggest).", e);
+      throw new Error(`Error en IA: ${e.message}`);
     }
   },
 
   async optimizeRoute(stops: any[], base: any, config: any) {
-    const fallback = getMockOptimization(stops.length);
+    // No mock available.
     try {
-      const model = getAI().getGenerativeModel({ model: "gemini-1.5-pro" });
+      const model = getAI().getGenerativeModel({ model: "gemini-1.5-flash" });
       const prompt = `Optimiza rutas. JSON Output: { "routes": [...] }`;
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      return safeJsonParse(text, fallback);
-    } catch (e) {
-      console.warn("Gemini API Error (Optimize). Using Mock.", e);
-      return fallback;
+      return safeJsonParse(text, { routes: [] });
+    } catch (e: any) {
+      console.warn("Gemini API Error (Optimize).", e);
+      throw new Error(`Error en IA: ${e.message}`);
     }
   }
 };
