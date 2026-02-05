@@ -324,21 +324,36 @@ const RoutePlanner: React.FC = () => {
       }
     });
 
-    const dailyRate = 2000;
+    // --- LÓGICA DE COTIZACIÓN v3 (Solicitud Cliente: Viáticos + Sueldos + IVA) ---
+    // 1. Viáticos (Gastos diarios): $2,000 por cuadrilla (Hospedaje, Alimentos)
+    const dailyExpenses = 2000;
+
+    // 2. Sueldos (2 Choferes x $1,000 c/u): $2,000 por cuadrilla/día
+    const dailySalaries = 2000;
+
+    // Costo Diario Operativo Total por Cuadrilla (Viáticos + Sueldos)
+    const dailyRate = dailyExpenses + dailySalaries; // $4,000 MXN
+
+    // Costo Total por Tiempo (Días x Costo Diario)
     const totalViaticos = totalRouteDays * dailyRate;
 
-    // Regla de Negocio: 15 pesos x Km cubre Gasolina, Casetas, Desgaste y Percances
+    // 3. Gastos de Ruta (Gasolina, Peajes, Desgaste): $15 por KM
     const operationalCostPerKm = 15;
     const fuelCost = quotedKm * operationalCostPerKm;
 
-    // Cálculo de Utilidad (30%)
+    // 4. Subtotal del Proyecto (Operación + Logística)
     const subtotal = totalViaticos + fuelCost;
-    const margin = subtotal * 0.30;
-    // const totalProjectValue = subtotal + margin; // OLD LOGIC
 
-    // Nueva lógica simplificada si el usuario prefiere sumar todo directo, 
-    // pero mantenemos estructura comercial estándar (Costo + Margen)
-    const totalProjectValue = subtotal + margin;
+    // 5. Margen / Utilidad (Opcional, se mantiene en 0 o se ajusta según se requiera, 
+    // pero el cliente pidió desglose directo de costos, así que lo integramos al subtotal limpio)
+    const margin = 0; // Se puede reactivar si se desea mostrar separado, por ahora todo va al costo.
+
+    // 6. IVA (16%)
+    const ivaRate = 0.16;
+    const ivaAmount = subtotal * ivaRate;
+
+    // 7. GRAN TOTAL
+    const totalProjectValue = subtotal + ivaAmount;
 
     // ✅ Agregar campo para tiendas únicas
     const uniqueStoreIds = new Set(optimizedRoutes.flatMap(r => r.stops.map(s => s.id)));
@@ -354,6 +369,7 @@ const RoutePlanner: React.FC = () => {
       fuelCost,
       subtotal,
       margin,
+      ivaAmount, // ✅ EXPORTAR IVA
       totalProjectValue,
       routesCount: optimizedRoutes.length,
       totalStores // ✅ NUEVO: Tiendas ÚNICAS
@@ -3514,7 +3530,7 @@ const RoutePlanner: React.FC = () => {
                       <p className="text-5xl font-black italic tracking-tighter">${Math.round(quotationData.totalViaticos).toLocaleString()}</p>
                       <span className="text-xs font-black uppercase text-blue-200/60">MXN</span>
                     </div>
-                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Calculado a $2,000 diarios por cuadrilla activa</p>
+                    <p className="text-[10px] font-bold text-blue-100/40 uppercase tracking-widest leading-relaxed">Calculado a ${quotationData.dailyRate.toLocaleString()} diarios (Viáticos + Sueldos)</p>
                   </div>
 
                   <div className="space-y-6 p-10 rounded-[2.5rem] bg-white/5 border border-white/10 backdrop-blur-md">
@@ -3530,7 +3546,7 @@ const RoutePlanner: React.FC = () => {
                 <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-10">
                   <div>
                     <p className="text-[14px] font-black uppercase tracking-[0.5em] text-blue-100 mb-2 opacity-80">Total del Proyecto</p>
-                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">IVA INCLUIDO (PROYECCIÓN FINAL)</p>
+                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/40">IVA INCLUIDO (GRAN TOTAL)</p>
                   </div>
                   <div className="flex items-start gap-4">
                     <span className="text-4xl mt-6 font-black opacity-40">$</span>
@@ -3546,8 +3562,8 @@ const RoutePlanner: React.FC = () => {
                     <p className="text-xl font-black">${Math.round(quotationData.subtotal).toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-emerald-400 uppercase">Utilidad / Gestión (30%)</p>
-                    <p className="text-xl font-black text-emerald-400">+ ${Math.round(quotationData.margin).toLocaleString()}</p>
+                    <p className="text-[10px] font-bold text-blue-200/50 uppercase">IVA (16%)</p>
+                    <p className="text-xl font-black text-white/80">+ ${Math.round(quotationData.ivaAmount).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -3971,8 +3987,8 @@ const RoutePlanner: React.FC = () => {
                           <p className="text-xs font-bold text-slate-500 uppercase">Recorrido Total</p>
                         </div>
                         <div>
-                          <p className="text-4xl font-black text-emerald-600">${Math.round(quotationData.fuelCost).toLocaleString()}</p>
-                          <p className="text-xs font-bold text-slate-500 uppercase">Víaticos y Operación</p>
+                          <p className="text-4xl font-black text-emerald-600">${Math.round(quotationData.totalViaticos).toLocaleString()}</p>
+                          <p className="text-xs font-bold text-slate-500 uppercase">Viáticos y Sueldos</p>
                         </div>
                       </div>
                     </div>
@@ -3980,12 +3996,12 @@ const RoutePlanner: React.FC = () => {
 
                   <div className="space-y-6">
                     <div className="flex justify-between items-center py-4 border-b border-slate-100">
-                      <p className="text-lg font-bold text-slate-600 uppercase">Costo Operativo Base</p>
+                      <p className="text-lg font-bold text-slate-600 uppercase">Subtotal Operativo (Rutas + Viáticos)</p>
                       <p className="text-xl font-bold text-slate-900">${Math.round(quotationData.subtotal).toLocaleString()}</p>
                     </div>
                     <div className="flex justify-between items-center py-4 border-b border-slate-100">
-                      <p className="text-lg font-bold text-slate-600 uppercase">Gestión y Logística</p>
-                      <p className="text-xl font-bold text-slate-900">${Math.round(quotationData.margin).toLocaleString()}</p>
+                      <p className="text-lg font-bold text-slate-600 uppercase">IVA (16%)</p>
+                      <p className="text-xl font-bold text-slate-900">${Math.round(quotationData.ivaAmount).toLocaleString()}</p>
                     </div>
                     <div className="flex justify-between items-center py-8 border-t-2 border-slate-900 mt-4">
                       <p className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Total Proyecto</p>
