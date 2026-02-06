@@ -1,0 +1,374 @@
+/**
+ * Design System - Target GIS Landing Page
+ * Version: 2.0.0
+ * Modern CSS with Custom Properties, Container Queries, and Advanced Features
+ */
+
+/* ============================================
+   DESIGN TOKENS
+   ============================================ */
+
+:root {
+    /* Color Palette - HSL for better manipulation */
+    --color-primary-h: 190;
+    --color-primary-s: 100%;
+    --color-primary-l: 50%;
+    --color-primary: hsl(var(--color-primary-h) var(--color-primary-s) var(--color-primary-l));
+    --color-primary-light: hsl(var(--color-primary-h) var(--color-primary-s) 60%);
+    --color-primary-dark: hsl(var(--color-primary-h) var(--color-primary-s) 40%);
+
+    --color-secondary-h: 160;
+    --color-secondary-s: 100%;
+    --color-secondary-l: 50%;
+    --color-secondary: hsl(var(--color-secondary-h) var(--color-secondary-s) var(--color-secondary-l));
+
+    /* Neutral Colors */
+    --color-bg-primary: hsl(210 40% 8%);
+    --color-bg-secondary: hsl(210 35% 11%);
+    --color-bg-tertiary: hsl(210 30% 14%);
+    --color-bg-elevated: hsl(210 25% 18%);
+
+    --color-text-primary: hsl(0 0% 98%);
+    --color-text-secondary: hsl(210 15% 70%);
+    --color-text-tertiary: hsl(210 10% 50%);
+
+    /* Semantic Colors */
+    --color-success: hsl(142 76% 36%);
+    --color-warning: hsl(45 93% 47%);
+    --color-error: hsl(0 84% 60%);
+    --color-info: hsl(199 89% 48%);
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg,
+            var(--color-primary) 0%,
+            var(--color-secondary) 100%);
+    --gradient-radial: radial-gradient(circle at center,
+            var(--color-primary) 0%,
+            transparent 70%);
+
+    /* Spacing Scale - Perfect Fourth (1.333) */
+    --space-3xs: clamp(0.25rem, 0.23rem + 0.11vw, 0.31rem);
+    --space-2xs: clamp(0.5rem, 0.46rem + 0.22vw, 0.63rem);
+    --space-xs: clamp(0.75rem, 0.68rem + 0.33vw, 0.94rem);
+    --space-sm: clamp(1rem, 0.91rem + 0.43vw, 1.25rem);
+    --space-md: clamp(1.5rem, 1.37rem + 0.65vw, 1.88rem);
+    --space-lg: clamp(2rem, 1.83rem + 0.87vw, 2.5rem);
+    --space-xl: clamp(3rem, 2.74rem + 1.3vw, 3.75rem);
+    --space-2xl: clamp(4rem, 3.65rem + 1.74vw, 5rem);
+    --space-3xl: clamp(6rem, 5.48rem + 2.61vw, 7.5rem);
+
+    /* Typography Scale - Perfect Fourth */
+    --font-size-xs: clamp(0.75rem, 0.7rem + 0.22vw, 0.88rem);
+    --font-size-sm: clamp(0.875rem, 0.82rem + 0.28vw, 1.03rem);
+    --font-size-base: clamp(1rem, 0.93rem + 0.33vw, 1.19rem);
+    --font-size-md: clamp(1.125rem, 1.04rem + 0.39vw, 1.38rem);
+    --font-size-lg: clamp(1.25rem, 1.15rem + 0.48vw, 1.56rem);
+    --font-size-xl: clamp(1.5rem, 1.37rem + 0.65vw, 1.88rem);
+    --font-size-2xl: clamp(2rem, 1.83rem + 0.87vw, 2.5rem);
+    --font-size-3xl: clamp(2.5rem, 2.26rem + 1.2vw, 3.19rem);
+    --font-size-4xl: clamp(3rem, 2.7rem + 1.52vw, 3.94rem);
+    --font-size-5xl: clamp(3.5rem, 3.09rem + 2.07vw, 4.88rem);
+
+    /* Font Families */
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+
+    /* Font Weights */
+    --font-weight-light: 300;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    --font-weight-black: 900;
+
+    /* Line Heights */
+    --line-height-tight: 1.2;
+    --line-height-snug: 1.375;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.625;
+    --line-height-loose: 2;
+
+    /* Border Radius */
+    --radius-sm: 0.375rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+    --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    --shadow-glow: 0 0 20px hsl(var(--color-primary-h) var(--color-primary-s) var(--color-primary-l) / 0.3);
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: 500ms cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+    /* Z-Index Scale */
+    --z-base: 0;
+    --z-dropdown: 1000;
+    --z-sticky: 1100;
+    --z-fixed: 1200;
+    --z-modal-backdrop: 1300;
+    --z-modal: 1400;
+    --z-popover: 1500;
+    --z-tooltip: 1600;
+
+    /* Container Widths */
+    --container-sm: 640px;
+    --container-md: 768px;
+    --container-lg: 1024px;
+    --container-xl: 1280px;
+    --container-2xl: 1536px;
+}
+
+/* ============================================
+   MODERN CSS RESET
+   ============================================ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+body {
+    min-height: 100vh;
+    min-height: 100dvh;
+    /* Dynamic viewport height */
+    font-family: var(--font-primary);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-primary);
+    overflow-x: hidden;
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Visually Hidden (Accessible) */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Focus Visible */
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Container */
+.container {
+    width: 100%;
+    max-width: var(--container-xl);
+    margin-inline: auto;
+    padding-inline: var(--space-md);
+}
+
+@container (min-width: 640px) {
+    .container {
+        padding-inline: var(--space-lg);
+    }
+}
+
+/* Gradient Text */
+.gradient-text {
+    background: var(--gradient-primary);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-size: 200% auto;
+}
+
+/* Glass Morphism */
+.glass {
+    background: hsl(var(--color-primary-h) var(--color-primary-s) var(--color-primary-l) / 0.05);
+    backdrop-filter: blur(10px) saturate(180%);
+    -webkit-backdrop-filter: blur(10px) saturate(180%);
+    border: 1px solid hsl(var(--color-primary-h) var(--color-primary-s) var(--color-primary-l) / 0.1);
+}
+
+/* Skeleton Loading */
+.skeleton {
+    background: linear-gradient(90deg,
+            var(--color-bg-secondary) 25%,
+            var(--color-bg-tertiary) 50%,
+            var(--color-bg-secondary) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY ENHANCEMENTS
+   ============================================ */
+
+/* Skip to main content */
+.skip-to-main {
+    position: absolute;
+    top: var(--space-sm);
+    left: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-primary);
+    color: var(--color-bg-primary);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    font-weight: var(--font-weight-semibold);
+    transform: translateY(-200%);
+    transition: transform var(--transition-base);
+    z-index: var(--z-tooltip);
+}
+
+.skip-to-main:focus {
+    transform: translateY(0);
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+    .animate {
+        animation: none !important;
+    }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+    :root {
+        --color-text-primary: hsl(0 0% 100%);
+        --color-bg-primary: hsl(0 0% 0%);
+    }
+}
+
+/* Dark Mode (system preference) */
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+    }
+}
+
+/* ============================================
+   PERFORMANCE OPTIMIZATIONS
+   ============================================ */
+
+/* GPU Acceleration Hints */
+.gpu-accelerated {
+    transform: translateZ(0);
+    will-change: transform;
+}
+
+/* Contain Layout Shifts */
+.contain-layout {
+    contain: layout;
+}
+
+.contain-paint {
+    contain: paint;
+}
+
+.contain-strict {
+    contain: strict;
+}
+
+/* Content Visibility (Performance) */
+.lazy-render {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 500px;
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Mobile First Approach */
+@custom-media --sm (min-width: 640px);
+@custom-media --md (min-width: 768px);
+@custom-media --lg (min-width: 1024px);
+@custom-media --xl (min-width: 1280px);
+@custom-media --2xl (min-width: 1536px);
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+
+@media print {
+
+    *,
+    *::before,
+    *::after {
+        background: transparent !important;
+        color: #000 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    a,
+    a:visited {
+        text-decoration: underline;
+    }
+
+    a[href]::after {
+        content: " (" attr(href) ")";
+    }
+
+    img {
+        page-break-inside: avoid;
+    }
+
+    p,
+    h2,
+    h3 {
+        orphans: 3;
+        widows: 3;
+    }
+
+    h2,
+    h3 {
+        page-break-after: avoid;
+    }
+}

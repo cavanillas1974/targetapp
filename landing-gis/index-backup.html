@@ -10,54 +10,48 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
-    <!-- Modern CSS Architecture -->
-    <link rel="stylesheet" href="css/design-system.css">
-    <link rel="stylesheet" href="css/components.css">
-    <link rel="stylesheet" href="css/animations.css">
-
-    <!-- Fallback for old browsers -->
-    <link rel="stylesheet" href="styles.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
     <!-- Hero Section -->
     <section class="hero">
-        <div class="hero__background"></div>
+        <div class="hero-bg"></div>
         <div class="container">
-            <div class="hero__content">
-                <div class="hero__badge">PROCESO AUTOMATIZADO</div>
-                <h1 class="hero__title">
+            <div class="hero-content">
+                <div class="badge">PROCESO AUTOMATIZADO</div>
+                <h1 class="hero-title">
                     INICIAR LIMPIEZA <span class="gradient-text">& GIS</span>
                 </h1>
-                <p class="hero__subtitle">Sistema Inteligente de Optimización de Rutas</p>
-                <p class="hero__description">
+                <p class="hero-subtitle">Sistema Inteligente de Optimización de Rutas</p>
+                <p class="hero-description">
                     Transforma tu lista de Excel en un sistema GPS inteligente que optimiza rutas,
                     minimiza costos y genera cronogramas precisos automáticamente.
                 </p>
-                <div class="hero__cta">
-                    <button class="btn btn--primary" onclick="scrollToDemo()">
+                <div class="hero-cta">
+                    <button class="btn-primary" onclick="scrollToDemo()">
                         <span>Ver Demo en Vivo</span>
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                             <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2"
                                 stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                     </button>
-                    <button class="btn btn--secondary" onclick="scrollToContact()">
+                    <button class="btn-secondary" onclick="scrollToContact()">
                         Solicitar Cotización
                     </button>
                 </div>
-                <div class="hero__stats">
-                    <div class="stat">
-                        <div class="stat__number">237</div>
-                        <div class="stat__label">Tiendas Procesadas</div>
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <div class="stat-number">237</div>
+                        <div class="stat-label">Tiendas Procesadas</div>
                     </div>
-                    <div class="stat">
-                        <div class="stat__number">15,847</div>
-                        <div class="stat__label">KM Optimizados</div>
+                    <div class="stat-item">
+                        <div class="stat-number">15,847</div>
+                        <div class="stat-label">KM Optimizados</div>
                     </div>
-                    <div class="stat">
-                        <div class="stat__number">100%</div>
-                        <div class="stat__label">Precisión GPS</div>
+                    <div class="stat-item">
+                        <div class="stat-number">100%</div>
+                        <div class="stat-label">Precisión GPS</div>
                     </div>
                 </div>
             </div>
@@ -434,11 +428,7 @@
         </div>
     </footer>
 
-    <!-- Modern JavaScript Modules -->
-    <script type="module" src="js/main.js"></script>
-
-    <!-- Fallback for legacy script -->
-    <script nomodule src="script.js"></script>
+    <script src="script.js"></script>
 </body>
 
 </html>
