@@ -1,312 +1,280 @@
-// ============================================
-// SMOOTH SCROLL
-// ============================================
-function scrollToDemo() {
-    const demo = document.getElementById('demo');
-    if (demo) {
-        demo.scrollIntoView({ behavior: 'smooth' });
-    }
-}
+/**
+ * Professional Landing Page - Unified Script
+ * Modern JavaScript without ES6 modules for maximum compatibility
+ * @version 2.0.1
+ */
 
-function scrollToContact() {
-    const contact = document.getElementById('contact');
-    if (contact) {
-        contact.scrollIntoView({ behavior: 'smooth' });
-    }
-}
+(function () {
+    'use strict';
 
-// ============================================
-// SCROLL ANIMATIONS (AOS - Animate On Scroll)
-// ============================================
-class ScrollAnimations {
-    constructor() {
-        this.elements = document.querySelectorAll('[data-aos]');
-        if (this.elements.length > 0) {
-            this.init();
+    // ============================================
+    // CONFIGURATION
+    // ============================================
+    const CONFIG = {
+        animations: {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px',
+            duration: 600,
         }
-    }
+    };
 
-    init() {
-        this.observeElements();
-    }
+    // ============================================
+    // SCROLL ANIMATIONS
+    // ============================================
+    class ScrollAnimations {
+        constructor(config) {
+            this.config = config;
+            this.elements = document.querySelectorAll('[data-aos]');
+            this.isPaused = false;
 
-    observeElements() {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const delay = entry.target.getAttribute('data-aos-delay') || 0;
-                        setTimeout(() => {
-                            entry.target.classList.add('aos-animate');
-                        }, parseInt(delay));
-                    }
-                });
-            },
-            {
-                threshold: 0.1,
-                rootMargin: '0px 0px -50px 0px'
+            if (this.elements.length > 0) {
+                this.init();
             }
-        );
-
-        this.elements.forEach(el => observer.observe(el));
-    }
-}
-
-// ============================================
-// FLOATING CUBE ANIMATION
-// ============================================
-class FloatingCube {
-    constructor() {
-        this.cube = document.querySelector('.floating-cube');
-        if (this.cube) {
-            this.init();
         }
-    }
 
-    init() {
-        document.addEventListener('mousemove', (e) => {
-            const x = (e.clientX / window.innerWidth - 0.5) * 20;
-            const y = (e.clientY / window.innerHeight - 0.5) * 20;
-
-            this.cube.style.transform = `
-                translateY(-20px) 
-                rotateX(${y}deg) 
-                rotateY(${x}deg)
-            `;
-        });
-    }
-}
-
-// ============================================
-// STATS COUNTER ANIMATION
-// ============================================
-class StatsCounter {
-    constructor() {
-        this.stats = document.querySelectorAll('.stat-number');
-        this.hasAnimated = false;
-        if (this.stats.length > 0) {
-            this.init();
-        }
-    }
-
-    init() {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting && !this.hasAnimated) {
-                        this.animateStats();
-                        this.hasAnimated = true;
-                    }
-                });
-            },
-            { threshold: 0.5 }
-        );
-
-        const heroStats = document.querySelector('.hero-stats');
-        if (heroStats) {
-            observer.observe(heroStats);
-        }
-    }
-
-    animateStats() {
-        this.stats.forEach(stat => {
-            const target = stat.textContent;
-
-            if (!target) return;
-
-            // Remove commas and % signs
-            const cleanedText = target.replace(/,/g, '').replace(/%/g, '').trim();
-
-            // Check if it's a number
-            if (!isNaN(cleanedText) && cleanedText !== '') {
-                const finalValue = parseInt(cleanedText);
-                if (!isNaN(finalValue) && finalValue > 0) {
-                    this.animateValue(stat, 0, finalValue, 2000);
+        init() {
+            const observer = new IntersectionObserver(
+                (entries) => this.handleIntersection(entries),
+                {
+                    threshold: this.config.threshold,
+                    rootMargin: this.config.rootMargin,
                 }
-            }
-        });
-    }
+            );
 
-    animateValue(element, start, end, duration) {
-        const range = end - start;
-        const increment = range / (duration / 16);
-        let current = start;
+            this.elements.forEach((el) => observer.observe(el));
+        }
 
-        const timer = setInterval(() => {
-            current += increment;
-            if (current >= end) {
-                current = end;
-                clearInterval(timer);
-            }
-            element.textContent = Math.floor(current).toLocaleString();
-        }, 16);
-    }
-}
+        handleIntersection(entries) {
+            if (this.isPaused) return;
 
-// ============================================
-// BUTTON RIPPLE EFFECT
-// ============================================
-class ButtonRipple {
-    constructor() {
-        this.buttons = document.querySelectorAll('.btn-primary, .btn-secondary');
-        if (this.buttons.length > 0) {
-            this.init();
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    const delay = parseInt(entry.target.dataset.aosDelay) || 0;
+                    setTimeout(() => {
+                        entry.target.classList.add('aos-animate');
+                    }, delay);
+                }
+            });
         }
     }
 
-    init() {
-        this.buttons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                const ripple = document.createElement('span');
-                const rect = button.getBoundingClientRect();
-                const size = Math.max(rect.width, rect.height);
-                const x = e.clientX - rect.left - size / 2;
-                const y = e.clientY - rect.top - size / 2;
+    // ============================================
+    // STATS COUNTER
+    // ============================================
+    class StatsCounter {
+        constructor() {
+            this.elements = document.querySelectorAll('.stat__number');
+            this.hasAnimated = false;
 
-                ripple.style.width = ripple.style.height = size + 'px';
-                ripple.style.left = x + 'px';
-                ripple.style.top = y + 'px';
-                ripple.classList.add('ripple');
+            if (this.elements.length > 0) {
+                this.init();
+            }
+        }
 
-                button.appendChild(ripple);
+        init() {
+            const observer = new IntersectionObserver(
+                (entries) => {
+                    entries.forEach((entry) => {
+                        if (entry.isIntersecting && !this.hasAnimated) {
+                            this.animateAll();
+                            this.hasAnimated = true;
+                        }
+                    });
+                },
+                { threshold: 0.5 }
+            );
 
-                setTimeout(() => ripple.remove(), 600);
+            const container = this.elements[0]?.closest('.hero__stats');
+            if (container) {
+                observer.observe(container);
+            }
+        }
+
+        animateAll() {
+            this.elements.forEach((el) => this.animateCounter(el));
+        }
+
+        animateCounter(element) {
+            const text = element.textContent.trim();
+            if (!text) return;
+
+            const match = text.match(/^([\d,]+)(.*)$/);
+            if (!match) return;
+
+            const numberStr = match[1];
+            const suffix = match[2];
+            const targetValue = parseInt(numberStr.replace(/,/g, ''));
+
+            if (isNaN(targetValue)) return;
+
+            this.animateValue(element, 0, targetValue, 2000, suffix);
+        }
+
+        animateValue(element, start, end, duration, suffix) {
+            const range = end - start;
+            const increment = range / (duration / 16);
+            let current = start;
+
+            const timer = setInterval(() => {
+                current += increment;
+
+                if (current >= end) {
+                    current = end;
+                    clearInterval(timer);
+                }
+
+                const formatted = Math.floor(current).toLocaleString('es-MX');
+                element.textContent = formatted + suffix;
+            }, 16);
+        }
+    }
+
+    // ============================================
+    // BUTTON RIPPLE
+    // ============================================
+    class ButtonRipple {
+        constructor() {
+            this.buttons = document.querySelectorAll('.btn');
+            this.init();
+        }
+
+        init() {
+            this.buttons.forEach((button) => {
+                button.addEventListener('click', (e) => this.createRipple(e, button));
             });
-        });
-    }
-}
+        }
 
-// Add ripple CSS dynamically
-const rippleStyle = document.createElement('style');
-rippleStyle.textContent = `
-    .btn-primary, .btn-secondary {
-        position: relative;
-        overflow: hidden;
-    }
-    
-    .ripple {
+        createRipple(event, button) {
+            const ripple = document.createElement('span');
+            const rect = button.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = event.clientX - rect.left - size / 2;
+            const y = event.clientY - rect.top - size / 2;
+
+            ripple.style.cssText = `
         position: absolute;
+        width: ${size}px;
+        height: ${size}px;
+        left: ${x}px;
+        top: ${y}px;
         border-radius: 50%;
         background: rgba(255, 255, 255, 0.3);
         transform: scale(0);
-        animation: rippleAnimation 0.6s ease-out;
+        animation: ripple-animation 0.6s ease-out;
         pointer-events: none;
-    }
-    
-    @keyframes rippleAnimation {
-        to {
-            transform: scale(4);
-            opacity: 0;
+      `;
+
+            button.appendChild(ripple);
+            setTimeout(() => ripple.remove(), 600);
         }
     }
-`;
-if (document.head) {
-    document.head.appendChild(rippleStyle);
-}
 
-// ============================================
-// PARALLAX EFFECT
-// ============================================
-class ParallaxEffect {
-    constructor() {
-        this.init();
-    }
-
-    init() {
-        let ticking = false;
-
-        window.addEventListener('scroll', () => {
-            if (!ticking) {
-                window.requestAnimationFrame(() => {
-                    const scrolled = window.pageYOffset;
-                    const parallaxElements = document.querySelectorAll('.hero-bg');
-
-                    parallaxElements.forEach(el => {
-                        const speed = 0.5;
-                        el.style.transform = `translateY(${scrolled * speed}px)`;
-                    });
-
-                    ticking = false;
-                });
-
-                ticking = true;
-            }
-        });
-    }
-}
-
-// ============================================
-// MAP PINS ANIMATION
-// ============================================
-class MapPinsAnimation {
-    constructor() {
-        this.pins = document.querySelectorAll('.pin');
-        this.hasAnimated = false;
-        if (this.pins.length > 0) {
+    // ============================================
+    // PARALLAX EFFECT
+    // ============================================
+    class ParallaxEffect {
+        constructor() {
+            this.ticking = false;
             this.init();
         }
-    }
 
-    init() {
-        const observer = new IntersectionObserver(
-            (entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting && !this.hasAnimated) {
-                        this.animatePins();
-                        this.hasAnimated = true;
-                    }
+        init() {
+            window.addEventListener('scroll', () => this.onScroll(), { passive: true });
+        }
+
+        onScroll() {
+            if (!this.ticking) {
+                window.requestAnimationFrame(() => {
+                    this.update();
+                    this.ticking = false;
                 });
-            },
-            { threshold: 0.3 }
-        );
+                this.ticking = true;
+            }
+        }
 
-        const mapPlaceholder = document.querySelector('.map-placeholder');
-        if (mapPlaceholder) {
-            observer.observe(mapPlaceholder);
+        update() {
+            const scrollY = window.pageYOffset;
+            const parallaxElements = document.querySelectorAll('.hero__background');
+
+            parallaxElements.forEach((el) => {
+                const speed = 0.5;
+                el.style.transform = `translateY(${scrollY * speed}px)`;
+            });
         }
     }
 
-    animatePins() {
-        this.pins.forEach((pin, index) => {
-            setTimeout(() => {
-                pin.style.opacity = '0';
-                pin.style.transform = 'scale(0)';
+    // ============================================
+    // FLOATING CUBE
+    // ============================================
+    class FloatingCube {
+        constructor() {
+            this.element = document.querySelector('.floating-cube');
+            if (this.element) {
+                this.init();
+            }
+        }
 
-                setTimeout(() => {
-                    pin.style.transition = 'all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55)';
-                    pin.style.opacity = '1';
-                    pin.style.transform = 'scale(1)';
-                }, 100);
-            }, index * 200);
-        });
+        init() {
+            document.addEventListener('mousemove', (e) => {
+                const x = (e.clientX / window.innerWidth - 0.5) * 20;
+                const y = (e.clientY / window.innerHeight - 0.5) * 20;
+
+                requestAnimationFrame(() => {
+                    this.element.style.transform = `
+            translateY(-20px) 
+            rotateX(${y}deg) 
+            rotateY(${x}deg)
+          `;
+                });
+            });
+        }
     }
-}
 
-// ============================================
-// INITIALIZE ALL MODULES
-// ============================================
-function initializeApp() {
-    try {
-        new ScrollAnimations();
-        new FloatingCube();
-        new StatsCounter();
-        new ButtonRipple();
-        new ParallaxEffect();
-        new MapPinsAnimation();
+    // ============================================
+    // SMOOTH SCROLL FUNCTIONS
+    // ============================================
+    window.scrollToDemo = function () {
+        const demo = document.getElementById('demo');
+        if (demo) {
+            demo.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
 
-        // Add loaded class
-        document.body.classList.add('loaded');
+    window.scrollToContact = function () {
+        const contact = document.getElementById('contact');
+        if (contact) {
+            contact.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
 
-        console.log('%c🚀 Sistema de Optimización Target', 'color: #00d9ff; font-size: 20px; font-weight: bold;');
-        console.log('%cPowered by AI & GIS Technology', 'color: #00ffa3; font-size: 12px;');
-    } catch (error) {
-        console.error('Error initializing app:', error);
+    // ============================================
+    // INITIALIZE APP
+    // ============================================
+    function initApp() {
+        try {
+            new ScrollAnimations(CONFIG.animations);
+            new StatsCounter();
+            new ButtonRipple();
+            new ParallaxEffect();
+            new FloatingCube();
+
+            // Log branding
+            console.log('%c🚀 Sistema de Optimización Target', 'color: #00d9ff; font-size: 20px; font-weight: bold;');
+            console.log('%cPowered by AI & GIS Technology', 'color: #00ffa3; font-size: 12px;');
+            console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #00d9ff;');
+            console.log('%cVersion 2.0.1 | Professional Architecture', 'color: #888; font-size: 10px;');
+
+            document.body.classList.add('loaded');
+        } catch (error) {
+            console.error('Error initializing app:', error);
+        }
     }
-}
 
-// Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeApp);
-} else {
-    initializeApp();
-}
+    // Start when DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+        initApp();
+    }
+
+})();
