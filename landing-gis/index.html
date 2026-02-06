@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema GIS de Optimización de Rutas | Target Instalaciones</title>
+    <meta name="description"
+        content="Transforma tu lista de Excel en un sistema GPS inteligente que optimiza rutas, minimiza costos y genera cronogramas precisos automáticamente.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-bg"></div>
+        <div class="container">
+            <div class="hero-content">
+                <div class="badge">PROCESO AUTOMATIZADO</div>
+                <h1 class="hero-title">
+                    INICIAR LIMPIEZA <span class="gradient-text">& GIS</span>
+                </h1>
+                <p class="hero-subtitle">Sistema Inteligente de Optimización de Rutas</p>
+                <p class="hero-description">
+                    Transforma tu lista de Excel en un sistema GPS inteligente que optimiza rutas,
+                    minimiza costos y genera cronogramas precisos automáticamente.
+                </p>
+                <div class="hero-cta">
+                    <button class="btn-primary" onclick="scrollToDemo()">
+                        <span>Ver Demo en Vivo</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                    <button class="btn-secondary" onclick="scrollToContact()">
+                        Solicitar Cotización
+                    </button>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat-item">
+                        <div class="stat-number">237</div>
+                        <div class="stat-label">Tiendas Procesadas</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">15,847</div>
+                        <div class="stat-label">KM Optimizados</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">100%</div>
+                        <div class="stat-label">Precisión GPS</div>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="floating-cube"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process Overview -->
+    <section class="process-overview">
+        <div class="container">
+            <h2 class="section-title">¿Qué Hace Este <span class="gradient-text">Proceso?</span></h2>
+            <div class="process-grid">
+                <div class="process-card" data-aos="fade-right">
+                    <div class="process-icon">
+                        <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                            <path d="M30 10L50 20V40L30 50L10 40V20L30 10Z" stroke="url(#gradient1)" stroke-width="2"
+                                fill="none" />
+                            <circle cx="30" cy="30" r="8" fill="url(#gradient1)" />
+                            <defs>
+                                <linearGradient id="gradient1" x1="10" y1="10" x2="50" y2="50">
+                                    <stop offset="0%" stop-color="#00d9ff" />
+                                    <stop offset="100%" stop-color="#00ffa3" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <h3>FASE 1: LIMPIEZA DE DATOS</h3>
+                    <ul class="feature-list">
+                        <li>✓ Elimina duplicados automáticamente</li>
+                        <li>✓ Normaliza formatos y direcciones</li>
+                        <li>✓ Valida información completa</li>
+                        <li>✓ Corrige errores comunes</li>
+                    </ul>
+                </div>
+                <div class="process-card" data-aos="fade-left">
+                    <div class="process-icon">
+                        <svg width="60" height="60" viewBox="0 0 60 60" fill="none">
+                            <circle cx="30" cy="30" r="20" stroke="url(#gradient2)" stroke-width="2" fill="none" />
+                            <path d="M30 15L35 25L45 30L35 35L30 45L25 35L15 30L25 25L30 15Z" fill="url(#gradient2)" />
+                            <defs>
+                                <linearGradient id="gradient2" x1="15" y1="15" x2="45" y2="45">
+                                    <stop offset="0%" stop-color="#00d9ff" />
+                                    <stop offset="100%" stop-color="#00ffa3" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                    <h3>FASE 2: GEOCODIFICACIÓN GIS</h3>
+                    <ul class="feature-list">
+                        <li>✓ Convierte direcciones a GPS</li>
+                        <li>✓ Coordenadas precisas verificadas</li>
+                        <li>✓ Validación inteligente con IA</li>
+                        <li>✓ Múltiples estrategias de backup</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="how-it-works">
+        <div class="container">
+            <h2 class="section-title">Proceso <span class="gradient-text">Paso a Paso</span></h2>
+            <div class="timeline">
+                <div class="timeline-item" data-aos="fade-up">
+                    <div class="timeline-number">1</div>
+                    <div class="timeline-content">
+                        <h3>Datos Sin Procesar</h3>
+                        <p>Cargas tu archivo Excel con direcciones, nombres y códigos de tiendas</p>
+                    </div>
+                </div>
+                <div class="timeline-item" data-aos="fade-up" data-aos-delay="100">
+                    <div class="timeline-number">2</div>
+                    <div class="timeline-content">
+                        <h3>Elimina Duplicados</h3>
+                        <p>El sistema detecta y elimina automáticamente tiendas repetidas</p>
+                    </div>
+                </div>
+                <div class="timeline-item" data-aos="fade-up" data-aos-delay="200">
+                    <div class="timeline-number">3</div>
+                    <div class="timeline-content">
+                        <h3>Valida & Normaliza</h3>
+                        <p>Estandariza formatos, corrige errores y valida información completa</p>
+                    </div>
+                </div>
+                <div class="timeline-item" data-aos="fade-up" data-aos-delay="300">
+                    <div class="timeline-number">4</div>
+                    <div class="timeline-content">
+                        <h3>Geocodificación GPS</h3>
+                        <p>Convierte cada dirección en coordenadas GPS precisas (lat, lng)</p>
+                    </div>
+                </div>
+                <div class="timeline-item" data-aos="fade-up" data-aos-delay="400">
+                    <div class="timeline-number">5</div>
+                    <div class="timeline-content">
+                        <h3>Datos Limpios & Listos</h3>
+                        <p>Sistema listo para optimizar rutas y calcular costos precisos</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Geocoding Strategy -->
+    <section class="geocoding-strategy">
+        <div class="container">
+            <h2 class="section-title">Estrategia de <span class="gradient-text">Geocodificación</span></h2>
+            <div class="transformation-visual">
+                <div class="transform-from" data-aos="fade-right">
+                    <div class="code-block">
+                        <div class="code-header">Dirección Original</div>
+                        <div class="code-content">
+                            Av. Insurgentes 1234,<br>
+                            Col. Del Valle,<br>
+                            CDMX, México
+                        </div>
+                    </div>
+                </div>
+                <div class="transform-arrow">
+                    <svg width="100" height="60" viewBox="0 0 100 60" fill="none">
+                        <path d="M10 30H80M80 30L65 15M80 30L65 45" stroke="url(#gradient3)" stroke-width="3"
+                            stroke-linecap="round" />
+                        <defs>
+                            <linearGradient id="gradient3" x1="10" y1="30" x2="90" y2="30">
+                                <stop offset="0%" stop-color="#00d9ff" />
+                                <stop offset="100%" stop-color="#00ffa3" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="transform-to" data-aos="fade-left">
+                    <div class="code-block">
+                        <div class="code-header">Coordenadas GPS</div>
+                        <div class="code-content gps-coords">
+                            <div class="coord-item">
+                                <span class="coord-label">LAT:</span>
+                                <span class="coord-value">19.4326</span>
+                            </div>
+                            <div class="coord-item">
+                                <span class="coord-label">LNG:</span>
+                                <span class="coord-value">-99.1332</span>
+                            </div>
+                            <div class="status-badge success">✓ Verificado</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="strategy-cards">
+                <div class="strategy-card" data-aos="zoom-in">
+                    <div class="strategy-number">1</div>
+                    <h4>Google Maps API</h4>
+                    <p>Precisión Máxima</p>
+                </div>
+                <div class="strategy-card" data-aos="zoom-in" data-aos-delay="100">
+                    <div class="strategy-number">2</div>
+                    <h4>Geocodificación Progresiva</h4>
+                    <p>Fallback Inteligente</p>
+                </div>
+                <div class="strategy-card" data-aos="zoom-in" data-aos-delay="200">
+                    <div class="strategy-number">3</div>
+                    <h4>IA Gemini</h4>
+                    <p>Estimación Avanzada</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Validation States -->
+    <section class="validation-states">
+        <div class="container">
+            <h2 class="section-title">Estados de <span class="gradient-text">Validación</span></h2>
+            <div class="states-grid">
+                <div class="state-card success" data-aos="flip-left">
+                    <div class="state-icon">✓</div>
+                    <h3>Geocodificada con Éxito</h3>
+                    <p>Coordenadas exactas verificadas con Google Maps API</p>
+                </div>
+                <div class="state-card warning" data-aos="flip-left" data-aos-delay="100">
+                    <div class="state-icon">⚠</div>
+                    <h3>Geocodificada Aproximadamente</h3>
+                    <p>Estimación por Inteligencia Artificial Gemini</p>
+                </div>
+                <div class="state-card error" data-aos="flip-left" data-aos-delay="200">
+                    <div class="state-icon">✗</div>
+                    <h3>Requiere Revisión Manual</h3>
+                    <p>Verificación adicional necesaria por el usuario</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Benefits Comparison -->
+    <section class="benefits-comparison">
+        <div class="container">
+            <h2 class="section-title">Beneficios del <span class="gradient-text">Proceso</span></h2>
+            <div class="comparison-grid">
+                <div class="comparison-column without" data-aos="fade-right">
+                    <h3 class="comparison-title">❌ SIN PROCESO</h3>
+                    <div class="comparison-items">
+                        <div class="comparison-item negative">
+                            <span class="icon">✗</span>
+                            <span class="text">No hay distancias reales</span>
+                        </div>
+                        <div class="comparison-item negative">
+                            <span class="icon">✗</span>
+                            <span class="text">Rutas ineficientes</span>
+                        </div>
+                        <div class="comparison-item negative">
+                            <span class="icon">✗</span>
+                            <span class="text">Costos incorrectos</span>
+                        </div>
+                        <div class="comparison-item negative">
+                            <span class="icon">✗</span>
+                            <span class="text">Sin visualización en mapa</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="comparison-divider"></div>
+                <div class="comparison-column with" data-aos="fade-left">
+                    <h3 class="comparison-title">✓ CON PROCESO</h3>
+                    <div class="comparison-items">
+                        <div class="comparison-item positive">
+                            <span class="icon">✓</span>
+                            <span class="text">Rutas optimizadas</span>
+                        </div>
+                        <div class="comparison-item positive">
+                            <span class="icon">✓</span>
+                            <span class="text">Costos precisos</span>
+                        </div>
+                        <div class="comparison-item positive">
+                            <span class="icon">✓</span>
+                            <span class="text">Cronograma realista</span>
+                        </div>
+                        <div class="comparison-item positive">
+                            <span class="icon">✓</span>
+                            <span class="text">Mapa interactivo completo</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results Dashboard -->
+    <section class="results-dashboard" id="demo">
+        <div class="container">
+            <h2 class="section-title">Resultado <span class="gradient-text">Final</span></h2>
+            <div class="dashboard-preview" data-aos="zoom-in">
+                <div class="dashboard-metrics">
+                    <div class="metric-card">
+                        <div class="metric-icon">📍</div>
+                        <div class="metric-value">237</div>
+                        <div class="metric-label">Tiendas Geocodificadas</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">🗺️</div>
+                        <div class="metric-value">15,847 km</div>
+                        <div class="metric-label">Optimizados</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">💰</div>
+                        <div class="metric-value">$474,210</div>
+                        <div class="metric-label">MXN Calculado</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon">✓</div>
+                        <div class="metric-value">100%</div>
+                        <div class="metric-label">Precisión GPS</div>
+                    </div>
+                </div>
+                <div class="dashboard-visual">
+                    <div class="map-placeholder">
+                        <div class="map-pins">
+                            <div class="pin" style="top: 20%; left: 30%;"></div>
+                            <div class="pin" style="top: 40%; left: 60%;"></div>
+                            <div class="pin" style="top: 60%; left: 25%;"></div>
+                            <div class="pin" style="top: 70%; left: 70%;"></div>
+                            <div class="pin" style="top: 35%; left: 80%;"></div>
+                        </div>
+                        <svg class="route-line" viewBox="0 0 100 100">
+                            <path d="M30,20 Q60,40 60,60 T25,60 Q70,70 70,70" stroke="url(#routeGradient)"
+                                stroke-width="0.5" fill="none" stroke-dasharray="2,2" />
+                            <defs>
+                                <linearGradient id="routeGradient">
+                                    <stop offset="0%" stop-color="#00d9ff" />
+                                    <stop offset="100%" stop-color="#00ffa3" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Executive Summary -->
+    <section class="executive-summary">
+        <div class="container">
+            <div class="quote-box" data-aos="fade-up">
+                <div class="quote-mark">"</div>
+                <p class="quote-text">
+                    Este botón transforma tu lista de Excel en un sistema GPS inteligente
+                    que optimiza rutas, minimiza costos y genera cronogramas precisos automáticamente.
+                </p>
+                <div class="quote-attribution">— Sistema de Optimización Target</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section" id="contact">
+        <div class="container">
+            <div class="cta-content" data-aos="zoom-in">
+                <h2>¿Listo para Optimizar tus Rutas?</h2>
+                <p>Solicita una demostración personalizada y descubre cómo podemos ayudarte</p>
+                <div class="cta-buttons">
+                    <button class="btn-primary large">
+                        <span>Solicitar Demo</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </button>
+                    <button class="btn-secondary large">Contactar Ventas</button>
+                </div>
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884z" />
+                            <path d="M18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" />
+                        </svg>
+                        <span>contacto@iamanos.com</span>
+                    </div>
+                    <div class="contact-item">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path
+                                d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                        </svg>
+                        <span>+52 55 4358 4103</span>
+                    </div>
+                    <div class="contact-item">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span>Ciudad de México, México</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <h3>Sistema de Optimización Target</h3>
+                    <p>Powered by AI & GIS Technology</p>
+                </div>
+                <div class="footer-links">
+                    <a href="#demo">Demo</a>
+                    <a href="#contact">Contacto</a>
+                    <a href="#">Documentación</a>
+                    <a href="#">Soporte</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2026 Target Instalaciones. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
