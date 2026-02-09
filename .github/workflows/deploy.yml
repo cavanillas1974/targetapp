@@ -31,6 +31,14 @@ jobs:
           VITE_GEMINI_API_KEY: ${{ secrets.VITE_GEMINI_API_KEY }}
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           BASE_URL: /targetapp/
+                - name: Verify build output
+        run: |
+          echo "=== Listing dist directory ==="
+          ls -la dist/
+          echo "=== Contents of dist/index.html ==="
+          head -50 dist/index.html || echo "index.html not found"
+          echo "=== Listing dist/assets ==="
+          ls -la dist/assets/ || echo "assets directory not found"
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
